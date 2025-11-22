@@ -1,33 +1,67 @@
+// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Text, useWindowDimensions } from 'react-native';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768; // Tablet/desktop
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
+        // ⬇️ TAB BAR APENAS NO MOBILE
+        tabBarStyle: isLargeScreen ? { display: 'none' } : {
+          backgroundColor: '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: '#e5e7eb',
+        },
+      }}
+    >
+      <Tabs.Screen 
+        name="dashboard" 
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Dashboard',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '📊' : '📊'}</Text>
+          ),
         }}
       />
-      <Tabs.Screen
-        name="explore"
+      <Tabs.Screen 
+        name="transactions" 
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Transações',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '💳' : '💳'}</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen 
+        name="reports" 
+        options={{
+          title: 'Relatórios',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '📈' : '📈'}</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen 
+        name="chat" 
+        options={{
+          title: 'IA',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '🤖' : '🤖'}</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen 
+        name="goal" 
+        options={{
+          title: 'Metas',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '🎯' : '🎯'}</Text>
+          ),
         }}
       />
     </Tabs>
