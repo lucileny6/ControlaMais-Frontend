@@ -1,3 +1,3 @@
-import PageRegister from "app/register";
+import PageRegister from "../../../app/register";
 
 export default PageRegister;

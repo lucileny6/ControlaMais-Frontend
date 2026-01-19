@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useState } from "react";
+import {
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-interface TransactionFormData {
+export interface TransactionFormData {
   description: string;
   amount: string;
   type: "income" | "expense";
@@ -17,10 +26,30 @@ interface TransactionFormProps {
   onCancel?: () => void;
 }
 
-const incomeCategories = ["Salário", "Freelance", "Investimentos", "Vendas", "Outros"];
-const expenseCategories = ["Alimentação", "Transporte", "Contas", "Saúde", "Educação", "Lazer", "Compras", "Outros"];
+const incomeCategories = [
+  "Salário",
+  "Freelance",
+  "Investimentos",
+  "Vendas",
+  "Outros",
+];
+const expenseCategories = [
+  "Alimentação",
+  "Transporte",
+  "Contas",
+  "Saúde",
+  "Educação",
+  "Lazer",
+  "Compras",
+  "Outros",
+];
 
-export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: TransactionFormProps) {
+export function TransactionForm({
+  onSubmit,
+  initialData,
+  isLoading,
+  onCancel,
+}: TransactionFormProps) {
   const [formData, setFormData] = useState<TransactionFormData>({
     description: initialData?.description || "",
     amount: initialData?.amount || "",
@@ -47,7 +76,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
       Alert.alert("Erro", "Por favor, selecione uma categoria");
       return;
     }
-    
+
     onSubmit(formData);
   };
 
@@ -55,7 +84,8 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const categories = formData.type === "income" ? incomeCategories : expenseCategories;
+  const categories =
+    formData.type === "income" ? incomeCategories : expenseCategories;
 
   return (
     <View style={styles.card}>
@@ -64,22 +94,21 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
           <Text style={styles.cardTitle}>
             {initialData ? "Editar Transação" : "Nova Transação"}
           </Text>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={onCancel}
-          >
+          <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
             <Text style={styles.closeButtonText}>×</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.cardDescription}>
-          {formData.type === "income" ? "Registre uma nova receita" : "Registre uma nova despesa"}
+          {formData.type === "income"
+            ? "Registre uma nova receita"
+            : "Registre uma nova despesa"}
         </Text>
       </View>
-      
+
       <ScrollView style={styles.cardContent}>
         <View style={styles.formGroup}>
           <Text style={styles.label}>Tipo</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.selectTrigger}
             onPress={() => setShowTypePicker(true)}
           >
@@ -115,11 +144,17 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Categoria</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.selectTrigger}
             onPress={() => setShowCategoryPicker(true)}
           >
-            <Text style={formData.category ? styles.selectValue : styles.selectPlaceholder}>
+            <Text
+              style={
+                formData.category
+                  ? styles.selectValue
+                  : styles.selectPlaceholder
+              }
+            >
               {formData.category || "Selecione uma categoria"}
             </Text>
             <Text style={styles.selectArrow}>▼</Text>
@@ -132,7 +167,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
             style={styles.input}
             value={formData.date}
             onChangeText={(value) => handleChange("date", value)}
-            placeholder="YYYY-MM-DD"
+            placeholder="DD-MM-YYYY"
           />
         </View>
 
@@ -151,7 +186,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
 
         <View style={styles.buttonsContainer}>
           {onCancel && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.button, styles.cancelButton]}
               onPress={onCancel}
               disabled={isLoading}
@@ -159,14 +194,18 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.button, styles.submitButton]}
             onPress={handleSubmit}
             disabled={isLoading}
           >
             <Text style={styles.submitButtonText}>
-              {isLoading ? "Salvando..." : initialData ? "Atualizar" : "Adicionar Transação"}
+              {isLoading
+                ? "Salvando..."
+                : initialData
+                  ? "Atualizar"
+                  : "Adicionar Transação"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -181,7 +220,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Selecione o Tipo</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalOption}
               onPress={() => {
                 handleChange("type", "income");
@@ -190,7 +229,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
             >
               <Text style={styles.modalOptionText}>Receita</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalOption}
               onPress={() => {
                 handleChange("type", "expense");
@@ -199,7 +238,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
             >
               <Text style={styles.modalOptionText}>Despesa</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalOption, styles.modalCancel]}
               onPress={() => setShowTypePicker(false)}
             >
@@ -220,7 +259,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
             <Text style={styles.modalTitle}>Selecione a Categoria</Text>
             <ScrollView style={styles.modalScroll}>
               {categories.map((category) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={category}
                   style={styles.modalOption}
                   onPress={() => {
@@ -231,7 +270,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
                   <Text style={styles.modalOptionText}>{category}</Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalOption, styles.modalCancel]}
                 onPress={() => setShowCategoryPicker(false)}
               >
@@ -247,7 +286,7 @@ export function TransactionForm({ onSubmit, initialData, isLoading, onCancel }: 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     margin: 16,
     elevation: 3,
@@ -256,17 +295,17 @@ const styles = StyleSheet.create({
     padding: 8,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   cardTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-    flex: 1
+    fontWeight: "bold",
+    color: "#000000",
+    flex: 1,
   },
   cardDescription: {
     fontSize: 14,
-    color: '#666666',
+    color: "#666666",
   },
   cardContent: {
     padding: 18,
@@ -278,47 +317,47 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
+    fontWeight: "500",
+    color: "#000000",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: '#000000',
+    color: "#000000",
   },
   textArea: {
     minHeight: 60,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
   selectTrigger: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
     borderRadius: 8,
     padding: 12,
   },
   selectValue: {
     fontSize: 16,
-    color: '#000000',
+    color: "#000000",
   },
   selectPlaceholder: {
     fontSize: 16,
-    color: '#999999',
+    color: "#999999",
   },
   selectArrow: {
     fontSize: 12,
-    color: '#666666',
+    color: "#666666",
   },
   buttonsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginTop: 8,
   },
@@ -326,48 +365,48 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666666',
+    fontWeight: "600",
+    color: "#666666",
   },
   submitButton: {
-    backgroundColor: '#000000',
+    backgroundColor: "#000000",
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
+    fontWeight: "600",
+    color: "#ffffff",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 12,
-    width: '80%',
-    maxHeight: '60%',
-    overflow: 'hidden',
+    width: "80%",
+    maxHeight: "60%",
+    overflow: "hidden",
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    textAlign: 'center',
+    borderBottomColor: "#f0f0f0",
+    textAlign: "center",
   },
   modalScroll: {
     maxHeight: 300,
@@ -375,37 +414,37 @@ const styles = StyleSheet.create({
   modalOption: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   modalOptionText: {
     fontSize: 16,
-    color: '#000000',
-    textAlign: 'center',
+    color: "#000000",
+    textAlign: "center",
   },
   modalCancel: {
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    backgroundColor: '#f9f9f9',
+    borderTopColor: "#f0f0f0",
+    backgroundColor: "#f9f9f9",
   },
   modalCancelText: {
     fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-    fontWeight: '500',
+    color: "#666666",
+    textAlign: "center",
+    fontWeight: "500",
   },
   closeButton: {
     padding: 4,
   },
   closeButtonText: {
     fontSize: 20,
-    color: '#6b7280',
-    fontWeight: 'bold',
+    color: "#6b7280",
+    fontWeight: "bold",
   },
 
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 4,
   },
 });

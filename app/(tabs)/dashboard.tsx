@@ -79,7 +79,7 @@ export default function PageDashboard(){
                             <View style={styles.welcomeSection}>
                                 <Text style={styles.title}>Dashboard</Text>
                                 <Text style={styles.subtitle}>
-                                    {user ? `Bem-vindo, ${user.name || user.email}` : 'Visão geral das suas finanças pessoais'}
+                                    {user ? `Bem-vindo, ${user.name}` : 'Visão geral das suas finanças pessoais'}
                                 </Text>
                             </View>
                             
