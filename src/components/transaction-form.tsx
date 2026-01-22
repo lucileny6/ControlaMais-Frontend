@@ -10,9 +10,13 @@ import {
   View,
 } from "react-native";
 
+/* ==============================
+   TIPOS
+============================== */
+
 export interface TransactionFormData {
   description: string;
-  amount: string;
+  amount: number;
   type: "income" | "expense";
   category: string;
   date: string;
@@ -26,6 +30,10 @@ interface TransactionFormProps {
   onCancel?: () => void;
 }
 
+/* ==============================
+   CATEGORIAS (UI)
+============================== */
+
 const incomeCategories = [
   "Salário",
   "Freelance",
@@ -33,6 +41,7 @@ const incomeCategories = [
   "Vendas",
   "Outros",
 ];
+
 const expenseCategories = [
   "Alimentação",
   "Transporte",
@@ -44,17 +53,40 @@ const expenseCategories = [
   "Outros",
 ];
 
+/* ==============================
+   MAPAS PARA BACKEND
+============================== */
+
+const incomeCategoryMap: Record<string, string> = {
+  Salário: "SALARIO",
+  Freelance: "FREELANCE",
+  Investimentos: "INVESTIMENTOS",
+  Vendas: "VENDAS",
+  Outros: "OUTROS",
+};
+
+const expenseCategoryMap: Record<string, string> = {
+  Alimentação: "ALIMENTACAO",
+  Transporte: "TRANSPORTE",
+  Contas: "CONTAS",
+  Saúde: "SAUDE",
+  Educação: "EDUCACAO",
+  Lazer: "LAZER",
+  Compras: "COMPRAS",
+  Outros: "OUTROS",
+};
+
 export function TransactionForm({
   onSubmit,
   initialData,
   isLoading,
   onCancel,
 }: TransactionFormProps) {
-  const [formData, setFormData] = useState<TransactionFormData>({
+  const [formData, setFormData] = useState({
     description: initialData?.description || "",
-    amount: initialData?.amount || "",
+    amount: "",
     type: initialData?.type || "expense",
-    category: initialData?.category || "",
+    category: "",
     date: initialData?.date || new Date().toISOString().split("T")[0],
     notes: initialData?.notes || "",
   });
@@ -62,26 +94,45 @@ export function TransactionForm({
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
 
+  /* ==============================
+     SUBMIT
+  ============================== */
+
   const handleSubmit = () => {
-    // Validação básica
     if (!formData.description.trim()) {
-      Alert.alert("Erro", "Por favor, insira uma descrição");
+      Alert.alert("Erro", "Informe a descrição");
       return;
     }
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      Alert.alert("Erro", "Por favor, insira um valor válido");
+
+    const amount = Number(
+      formData.amount.replace(/\./g, "").replace(",", "."),
+    );
+
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Erro", "Valor inválido");
       return;
     }
+
     if (!formData.category) {
-      Alert.alert("Erro", "Por favor, selecione uma categoria");
+      Alert.alert("Erro", "Selecione uma categoria");
       return;
     }
 
-    onSubmit(formData);
-  };
+    const categoryMap =
+      formData.type === "income"
+        ? incomeCategoryMap
+        : expenseCategoryMap;
 
-  const handleChange = (field: keyof TransactionFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    const payload: TransactionFormData = {
+      description: formData.description,
+      amount,
+      type: formData.type,
+      category: categoryMap[formData.category],
+      date: formData.date,
+      notes: formData.notes,
+    };
+
+    onSubmit(payload);
   };
 
   const categories =
@@ -91,10 +142,8 @@ export function TransactionForm({
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.headerRow}>
-          <Text style={styles.cardTitle}>
-            {initialData ? "Editar Transação" : "Nova Transação"}
-          </Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
+          <Text style={styles.cardTitle}>Nova Transação</Text>
+          <TouchableOpacity onPress={onCancel}>
             <Text style={styles.closeButtonText}>×</Text>
           </TouchableOpacity>
         </View>
@@ -106,6 +155,7 @@ export function TransactionForm({
       </View>
 
       <ScrollView style={styles.cardContent}>
+        {/* TIPO */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Tipo</Text>
           <TouchableOpacity
@@ -119,163 +169,139 @@ export function TransactionForm({
           </TouchableOpacity>
         </View>
 
+        {/* VALOR */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Valor (R$)</Text>
           <TextInput
             style={styles.input}
             placeholder="0,00"
             value={formData.amount}
-            onChangeText={(value) => handleChange("amount", value)}
             keyboardType="numeric"
-            returnKeyType="done"
+            onChangeText={(v) =>
+              setFormData((prev) => ({ ...prev, amount: v }))
+            }
           />
         </View>
 
+        {/* DESCRIÇÃO */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Descrição</Text>
           <TextInput
             style={styles.input}
-            placeholder="Ex: Supermercado, Salário, Conta de luz..."
             value={formData.description}
-            onChangeText={(value) => handleChange("description", value)}
-            returnKeyType="done"
+            onChangeText={(v) =>
+              setFormData((prev) => ({ ...prev, description: v }))
+            }
           />
         </View>
 
+        {/* CATEGORIA */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Categoria</Text>
           <TouchableOpacity
             style={styles.selectTrigger}
             onPress={() => setShowCategoryPicker(true)}
           >
-            <Text
-              style={
-                formData.category
-                  ? styles.selectValue
-                  : styles.selectPlaceholder
-              }
-            >
+            <Text style={styles.selectValue}>
               {formData.category || "Selecione uma categoria"}
             </Text>
             <Text style={styles.selectArrow}>▼</Text>
           </TouchableOpacity>
         </View>
 
+        {/* DATA */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Data</Text>
           <TextInput
             style={styles.input}
             value={formData.date}
-            onChangeText={(value) => handleChange("date", value)}
-            placeholder="DD-MM-YYYY"
+            onChangeText={(v) =>
+              setFormData((prev) => ({ ...prev, date: v }))
+            }
           />
         </View>
 
+        {/* OBS */}
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Observações (opcional)</Text>
+          <Text style={styles.label}>Observações</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Adicione detalhes sobre esta transação..."
-            value={formData.notes}
-            onChangeText={(value) => handleChange("notes", value)}
             multiline
-            numberOfLines={3}
-            textAlignVertical="top"
+            value={formData.notes}
+            onChangeText={(v) =>
+              setFormData((prev) => ({ ...prev, notes: v }))
+            }
           />
         </View>
 
-        <View style={styles.buttonsContainer}>
-          {onCancel && (
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
-              onPress={onCancel}
-              disabled={isLoading}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={[styles.button, styles.submitButton]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            <Text style={styles.submitButtonText}>
-              {isLoading
-                ? "Salvando..."
-                : initialData
-                  ? "Atualizar"
-                  : "Adicionar Transação"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          <Text style={styles.submitButtonText}>
+            {isLoading ? "Salvando..." : "Adicionar"}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      <Modal
-        visible={showTypePicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowTypePicker(false)}
-      >
+      {/* MODAL TIPO */}
+      <Modal transparent visible={showTypePicker} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Selecione o Tipo</Text>
+
             <TouchableOpacity
               style={styles.modalOption}
               onPress={() => {
-                handleChange("type", "income");
+                setFormData((prev) => ({
+                  ...prev,
+                  type: "income",
+                  category: "",
+                }));
                 setShowTypePicker(false);
               }}
             >
               <Text style={styles.modalOptionText}>Receita</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.modalOption}
               onPress={() => {
-                handleChange("type", "expense");
+                setFormData((prev) => ({
+                  ...prev,
+                  type: "expense",
+                  category: "",
+                }));
                 setShowTypePicker(false);
               }}
             >
               <Text style={styles.modalOptionText}>Despesa</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalOption, styles.modalCancel]}
-              onPress={() => setShowTypePicker(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal
-        visible={showCategoryPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCategoryPicker(false)}
-      >
+      {/* MODAL CATEGORIA */}
+      <Modal transparent visible={showCategoryPicker} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecione a Categoria</Text>
-            <ScrollView style={styles.modalScroll}>
-              {categories.map((category) => (
+            <ScrollView>
+              {categories.map((cat) => (
                 <TouchableOpacity
-                  key={category}
+                  key={cat}
                   style={styles.modalOption}
                   onPress={() => {
-                    handleChange("category", category);
+                    setFormData((prev) => ({
+                      ...prev,
+                      category: cat,
+                    }));
                     setShowCategoryPicker(false);
                   }}
                 >
-                  <Text style={styles.modalOptionText}>{category}</Text>
+                  <Text style={styles.modalOptionText}>{cat}</Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity
-                style={[styles.modalOption, styles.modalCancel]}
-                onPress={() => setShowCategoryPicker(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -284,167 +310,60 @@ export function TransactionForm({
   );
 }
 
+/* ==============================
+   STYLES
+============================== */
+
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    margin: 16,
-    elevation: 3,
-  },
-  cardHeader: {
-    padding: 8,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#000000",
-    flex: 1,
-  },
-  cardDescription: {
-    fontSize: 14,
-    color: "#666666",
-  },
-  cardContent: {
-    padding: 18,
-    paddingTop: 8,
-    maxHeight: 400,
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#000000",
-    marginBottom: 8,
-  },
+  card: { backgroundColor: "#fff", borderRadius: 12, margin: 16 },
+  cardHeader: { padding: 16 },
+  cardTitle: { fontSize: 20, fontWeight: "bold" },
+  cardDescription: { color: "#666" },
+  cardContent: { padding: 16 },
+  formGroup: { marginBottom: 16 },
+  label: { fontWeight: "600", marginBottom: 6 },
   input: {
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e5e5",
+    borderColor: "#ccc",
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
-    color: "#000000",
   },
-  textArea: {
-    minHeight: 60,
-    textAlignVertical: "top",
-  },
+  textArea: { minHeight: 60 },
   selectTrigger: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    borderRadius: 8,
-    padding: 12,
   },
-  selectValue: {
-    fontSize: 16,
-    color: "#000000",
-  },
-  selectPlaceholder: {
-    fontSize: 16,
-    color: "#999999",
-  },
-  selectArrow: {
-    fontSize: 12,
-    color: "#666666",
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  button: {
-    flex: 1,
+  selectValue: { fontSize: 16 },
+  selectArrow: { fontSize: 12 },
+  submitButton: {
+    backgroundColor: "#000",
     padding: 16,
     borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
   },
-  cancelButton: {
-    backgroundColor: "#f5f5f5",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#666666",
-  },
-  submitButton: {
-    backgroundColor: "#000000",
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
+  submitButtonText: { color: "#fff", fontWeight: "600" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
   },
   modalContent: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
+    backgroundColor: "#fff",
     width: "80%",
-    maxHeight: "60%",
-    overflow: "hidden",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    textAlign: "center",
-  },
-  modalScroll: {
-    maxHeight: 300,
-  },
-  modalOption: {
+    borderRadius: 12,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
   },
-  modalOptionText: {
-    fontSize: 16,
-    color: "#000000",
-    textAlign: "center",
-  },
-  modalCancel: {
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    backgroundColor: "#f9f9f9",
-  },
-  modalCancelText: {
-    fontSize: 16,
-    color: "#666666",
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  closeButton: {
-    padding: 4,
-  },
-  closeButtonText: {
-    fontSize: 20,
-    color: "#6b7280",
-    fontWeight: "bold",
-  },
-
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
+  modalOption: { padding: 12 },
+  modalOptionText: { textAlign: "center", fontSize: 16 },
+  closeButtonText: { fontSize: 22 },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 4,
   },
 });

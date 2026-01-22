@@ -1,66 +1,120 @@
-import type {
-    ApiResponse,
-    ChatMessage,
-    CreateTransactionDTO,
-    FinancialSummary,
-    Goal,
-    PaginatedResponse,
-    Transaction,
-    User,
-} from "@/lib/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+/* =====================================================
+   DTOs DO FRONT (espelho do BACKEND)
+===================================================== */
+
+// ===== AUTH / USER =====
+
+export interface ApiResponse<T> {
+  data: T;
+  message?: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
+// ===== RECEITA =====
+
+export interface CreateReceitaDTO {
+  valor: number;
+  data: string; // yyyy-MM-dd
+  categoria: string;
+  descricao: string;
+  observacao?: string;
+}
+
+// ===== DESPESA =====
+
+export interface CreateDespesaDTO {
+  valor: number;
+  data: string; // yyyy-MM-dd
+  categoria: string;
+  descricao: string;
+  observacao?: string;
+}
+
+// ===== DASHBOARD =====
+
+export interface DashboardDTO {
+  saldo: number;
+  totalReceitas: number;
+  totalDespesas: number;
+  transacoesRecentes: string[];
+  acoesRapidas: string[];
+}
+
+
+export interface TransacaoRecenteDTO {
+  id: number;
+  tipo: "RECEITA" | "DESPESA";
+  descricao: string;
+  categoria: string;
+  valor: number;
+  data: string;
+}
+
+/* =====================================================
+   API SERVICE
+===================================================== */
 
 export class ApiService {
   private baseUrl: string;
-  private token?: string;
 
   constructor() {
-    this.baseUrl = "http://localhost:8080/api/users";
+    // 🔹 BASE GLOBAL DO BACKEND
+    this.baseUrl = "http://192.168.1.116:8080/api";
+
   }
 
-  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // ===== MÉTODO BASE =====
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-
     const token = await AsyncStorage.getItem("authToken");
-    console.log("Token enviado para API:", token);
 
     const config: RequestInit = {
       ...options,
       headers: {
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }),
-        ...(options?.headers || {}),
+        ...(options.headers || {}),
       },
     };
 
     try {
-      console.log(`API Request: ${url}`, config);
+      console.log("API Request:", url, config);
 
       const response = await fetch(url, config);
 
       if (!response.ok) {
-        const errorBody = (await response.json().catch(() => null)) as {
-          message?: string;
-        } | null;
+        const errorBody: any = await response.json().catch(() => null);
         throw new Error(
-          errorBody?.message ?? `HTTP error! status: ${response.status}`,
+          errorBody?.message || `Erro HTTP ${response.status}`,
         );
       }
 
-      const data = (await response.json()) as T;
-      console.log(`API Response: ${url}`, data);
-      return data;
+      return (await response.json()) as T;
     } catch (error) {
-      console.error("API request failed:", error);
+      console.error("Erro na API:", error);
       throw error;
     }
   }
+
+  /* =====================================================
+     AUTH / USER
+  ===================================================== */
 
   async login(
     email: string,
     password: string,
   ): Promise<ApiResponse<{ user: User; token: string }>> {
-    return this.request(`/login`, {
+    return this.request("/users/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
@@ -71,96 +125,64 @@ export class ApiService {
     email: string,
     password: string,
   ): Promise<ApiResponse<{ user: User; token: string }>> {
-    return this.request(`/register`, {
+    return this.request("/users/register", {
       method: "POST",
-      body: JSON.stringify({ username: name, email, password }),
+      body: JSON.stringify({
+        username: name,
+        email,
+        password,
+      }),
     });
   }
 
   async logout(): Promise<void> {
-    try {
-      await AsyncStorage.multiRemove(["authToken", "user"]);
-      console.log("Logout realizado com sucesso");
-    } catch (error) {
-      console.error("Erro ao realizar o logout:", error);
-      throw error;
-    }
+    await AsyncStorage.multiRemove(["authToken", "user"]);
   }
 
-  async getTransactions(): Promise<PaginatedResponse<Transaction>> {
-    return this.request(`/transactions`);
+  async getCurrentUser(): Promise<User> {
+    return this.request("/me");
   }
 
-  async createTransection(dto: CreateTransactionDTO): Promise<Transaction> {
-    return this.request("/transactions", {
+  async updateUser(userData: Partial<User>): Promise<User> {
+    return this.request("/profile", {
+      method: "PUT",
+      body: JSON.stringify(userData),
+    });
+  }
+
+  /* =====================================================
+     RECEITA
+  ===================================================== */
+
+  async createReceita(dto: CreateReceitaDTO) {
+    return this.request("/receitas", {
       method: "POST",
       body: JSON.stringify(dto),
     });
   }
 
-  async updateTransaction(
-    id: string,
-    transactionData: Partial<Transaction>,
-  ): Promise<Transaction> {
-    return this.request(`/transactions/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(transactionData),
-    });
-  }
+  /* =====================================================
+     DESPESA
+  ===================================================== */
 
-  async deleteTransaction(id: string): Promise<void> {
-    return this.request(`/transactions/${id}`, {
-      method: "DELETE",
-    });
-  }
-
-  async getFinancialSummary(): Promise<FinancialSummary> {
-    return this.request("/financial-summary");
-  }
-
-  async getGoals(): Promise<Goal[]> {
-    return this.request("/goals");
-  }
-
-  async createdGoal(
-    goalData: Omit<Goal, "id" | "createdAt" | "updatedAt">,
-  ): Promise<Goal> {
-    return this.request(`/goals`, {
+  async createDespesa(dto: CreateDespesaDTO) {
+    return this.request("/despesas", {
       method: "POST",
-      body: JSON.stringify(goalData),
+      body: JSON.stringify(dto),
     });
   }
 
-  async updateGoal(id: string, goalData: Partial<Goal>): Promise<Goal> {
-    return this.request(`/goals/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(goalData),
-    });
-  }
+  /* =====================================================
+     DASHBOARD
+  ===================================================== */
 
-  async deletegoal(id: string): Promise<void> {
-    return this.request(`/goals/${id}`, {
-      method: "DELETE",
-    });
-  }
-
-  async sendChatMessage(message: string): Promise<ChatMessage> {
-    return this.request("/chat", {
-      method: "POST",
-      body: JSON.stringify({ message }),
-    });
-  }
-
-  async getCurrentUser(): Promise<User> {
-    return this.request(`/me`);
-  }
-
-  async updateUser(userData: Partial<User>): Promise<User> {
-    return this.request(`/profile`, {
-      method: "PUT",
-      body: JSON.stringify(userData),
-    });
-  }
+  async getDashboard(): Promise<DashboardDTO> {
+  return this.request("/dashboard");
 }
+
+}
+/* =====================================================
+   INSTÂNCIA ÚNICA
+===================================================== */
 
 export const apiService = new ApiService();
