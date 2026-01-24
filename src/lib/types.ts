@@ -90,3 +90,23 @@ export interface ResponsiveStyles {
   columnMinWidth: number;
   cardMinHeight: number;
 }
+// ===================================
+// CHAT IA
+// ===================================
+
+export type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
+
+export interface AcaoFinanceira {
+  tipo: "RECEITA" | "DESPESA";
+  valor: number;
+  categoria: string;
+  descricao: string;
+  data: string;
+}
+
+export interface AIResponse {
+  tipo: "TEXTO" | "CONFIRMACAO";
+  mensagem: string;
+  acao?: AcaoFinanceira;
+}
+

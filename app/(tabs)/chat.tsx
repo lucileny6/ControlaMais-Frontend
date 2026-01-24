@@ -6,13 +6,24 @@ import { DashboardNav } from '@/components/dashboard-nav';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  useWindowDimensions
+} from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-interface User {
-    name?: string;
-    email?: string;
-}
+/* =========================
+   TYPES
+========================= */
+
+type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
 
 interface Message {
   id: string;
@@ -21,333 +32,258 @@ interface Message {
   timestamp: Date;
 }
 
-// Mock AI responses
-const getAIResponse = (userMessage: string): string => {
-  const message = userMessage.toLowerCase();
-
-  if (message.includes("saldo") || message.includes("quanto tenho")) {
-    return "Seu saldo atual é de R$ 2.350,00. Você teve um aumento de 20,1% em relação ao mês passado! 💰";
-  }
-
-  if (message.includes("economizar") || message.includes("poupar")) {
-    return "Aqui estão algumas dicas para economizar: 1) Anote todos os gastos, 2) Defina metas mensais, 3) Evite compras por impulso. Quer que eu te ajude a criar uma meta de poupança?";
-  }
-
-  if (message.includes("despesa") || message.includes("gasto")) {
-    return "Vou te ajudar a registrar uma despesa! Qual foi o valor e a categoria do gasto? Por exemplo: 'Gastei R$ 50 no supermercado'";
-  }
-
-  if (message.includes("meta")) {
-    return "Criar metas é fundamental! Sua meta atual é poupar R$ 1.000 e você já tem R$ 750 (75%). Quer ajustar essa meta ou criar uma nova?";
-  }
-
-  if (message.includes("gastos") || message.includes("análise")) {
-    return "Este mês você gastou R$ 850, que representa 26,6% da sua receita. Suas principais categorias de gasto são: Alimentação (35%), Contas (25%), Transporte (15%). Está dentro do recomendado!";
-  }
-
-  if (message.includes("compra") || message.includes("simular")) {
-    return "Vou simular uma compra para você! Me diga o valor do produto que está pensando em comprar e eu analiso o impacto no seu orçamento. Ou acesse a página de Metas para usar o simulador completo.";
-  }
-
-  if (message.includes("endividamento") || message.includes("dívida")) {
-    return "Baseado no seu padrão atual de gastos, seu risco de endividamento é BAIXO. Você tem uma margem de segurança boa! Para análise detalhada, visite a seção de Metas onde temos o preditor de endividamento.";
-  }
-
-  if (message.includes("sugestões") || message.includes("dicas")) {
-    return "Tenho algumas sugestões personalizadas para você economizar até R$ 394/mês! As principais são: reduzir delivery (R$ 80/mês), renegociar planos (R$ 45/mês) e usar mais transporte público (R$ 120/mês). Veja todas na página de Metas!";
-  }
-
-  return "Entendi sua pergunta! Como assistente financeiro, posso te ajudar com controle de gastos, metas de poupança, análise de despesas, simulação de compras e previsão de endividamento. Pode me fazer perguntas específicas sobre suas finanças!";
+interface AcaoFinanceira {
+  tipo: "RECEITA" | "DESPESA";
+  valor: number;
+  categoria: string;
+  descricao: string;
+  data: string;
 }
+
+interface AIResponse {
+  tipo: "TEXTO" | "CONFIRMACAO";
+  mensagem: string;
+  acao?: AcaoFinanceira;
+}
+
+/* =========================
+   MOCK IA (TEMPORÁRIO)
+========================= */
+
+const mockIA = (mensagem: string): AIResponse => {
+  const text = mensagem.toLowerCase();
+
+  if (text.includes("paguei") || text.includes("gastei")) {
+    return {
+      tipo: "CONFIRMACAO",
+      mensagem:
+        "Entendi que você quer cadastrar a seguinte despesa. Confirma?",
+      acao: {
+        tipo: "DESPESA",
+        valor: 80,
+        categoria: "Internet",
+        descricao: "Conta de internet",
+        data: "2024-03-20",
+      },
+    };
+  }
+
+  if (text.includes("recebi") || text.includes("salário")) {
+    return {
+      tipo: "CONFIRMACAO",
+      mensagem:
+        "Entendi que você quer cadastrar a seguinte receita. Confirma?",
+      acao: {
+        tipo: "RECEITA",
+        valor: 1200,
+        categoria: "Salário",
+        descricao: "Salário mensal",
+        data: "2024-03-20",
+      },
+    };
+  }
+
+  return {
+    tipo: "TEXTO",
+    mensagem:
+      "Posso te ajudar a cadastrar receitas ou despesas. Exemplo: 'Paguei 80 de internet ontem'.",
+  };
+};
+
+/* =========================
+   COMPONENT
+========================= */
 
 export default function ChatPage() {
-    const router = useRouter();
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-    
-    const insets = useSafeAreaInsets();
-    const { width } = useWindowDimensions();
-    const isLargeScreen = width >= 768;
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768;
 
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: "1",
-            content:
-                "Olá! Sou seu assistente financeiro pessoal. Como posso te ajudar hoje a organizar suas finanças? Posso ajudar com análises, simulações de compra, previsões de endividamento e sugestões de economia!",
-            isUser: false,
-            timestamp: new Date(),
-        },
-    ]);
-    const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      content:
+        "Olá! Posso te ajudar a cadastrar receitas e despesas usando linguagem natural.",
+      isUser: false,
+      timestamp: new Date(),
+    },
+  ]);
 
-    useEffect(() => {
-        checkAuthentication();
-    }, []);
+  const [chatState, setChatState] = useState<ChatState>("NORMAL");
+  const [acaoPendente, setAcaoPendente] = useState<AcaoFinanceira | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-    const checkAuthentication = async () => {
-        try {
-            const storedUser = await AsyncStorage.getItem('user');
-            const authToken = await AsyncStorage.getItem('authToken');
-
-            if (!storedUser || !authToken) {
-                router.replace('/login');
-                return;
-            }
-
-            setUser(JSON.parse(storedUser));
-        } catch (error) {
-            console.error('Erro ao verificar autenticação:', error);
-            router.replace('/login');
-        } finally {
-            setIsLoadingAuth(false);
-        }
-    }
-
-    const handleSendMessage = async (content: string) => {
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            content,
-            isUser: true,
-            timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, userMessage]);
-        setIsLoading(true);
-
-        // Simular delay da IA
-        setTimeout(() => {
-            const aiResponse: Message = {
-                id: (Date.now() + 1).toString(),
-                content: getAIResponse(content),
-                isUser: false,
-                timestamp: new Date(),
-            };
-
-            setMessages((prev) => [...prev, aiResponse]);
-            setIsLoading(false);
-        }, 1000);
+  const handleSendMessage = (content: string) => {
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content,
+      isUser: true,
+      timestamp: new Date(),
     };
 
-    if (isLoadingAuth) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#000000" />
-                <Text style={styles.loadingText}>Carregando...</Text>
-            </View>
-        );
-    }
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
 
-    return(
-        <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
-            <DashboardHeader />
-            
-            <View style={styles.content}>
-                {/* DashboardNav apenas no desktop */}
-                {isLargeScreen && (
-                    <View style={styles.sidebar}>
-                        <View style={styles.sidebarContent}>
-                            <DashboardNav />
-                        </View>
-                    </View>
-                )}
-                
-                <View style={styles.main}>
-                    <KeyboardAvoidingView 
-                        style={styles.keyboardContainer}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    setTimeout(() => {
+      const response = mockIA(content);
+
+      const iaMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: response.mensagem,
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, iaMessage]);
+      setIsLoading(false);
+
+      if (response.tipo === "CONFIRMACAO" && response.acao) {
+        setChatState("AGUARDANDO_CONFIRMACAO");
+        setAcaoPendente(response.acao);
+      }
+    }, 800);
+  };
+
+  const confirmarAcao = () => {
+    if (!acaoPendente) return;
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        content: "✅ Ação confirmada! (mock – ainda não salva no banco)",
+        isUser: false,
+        timestamp: new Date(),
+      },
+    ]);
+
+    setChatState("NORMAL");
+    setAcaoPendente(null);
+  };
+
+  const cancelarAcao = () => {
+    setMessages(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        content: "❌ Ok, ação cancelada. Pode corrigir ou tentar novamente.",
+        isUser: false,
+        timestamp: new Date(),
+      },
+    ]);
+
+    setChatState("NORMAL");
+    setAcaoPendente(null);
+  };
+
+  return (
+    <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
+      <DashboardHeader />
+
+      <View style={styles.content}>
+        {isLargeScreen && (
+          <View style={styles.sidebar}>
+            <DashboardNav />
+          </View>
+        )}
+
+        <View style={styles.main}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <ScrollView style={styles.messagesContainer}>
+              {messages.map(msg => (
+                <ChatMessage
+                  key={msg.id}
+                  message={msg.content}
+                  isUser={msg.isUser}
+                  timestamp={msg.timestamp}
+                />
+              ))}
+
+              {chatState === "AGUARDANDO_CONFIRMACAO" && acaoPendente && (
+                <View style={styles.confirmBox}>
+                  <Text style={styles.confirmText}>
+                    {acaoPendente.tipo} • R$ {acaoPendente.valor} •{" "}
+                    {acaoPendente.categoria}
+                  </Text>
+
+                  <View style={styles.confirmButtons}>
+                    <TouchableOpacity
+                      style={styles.confirmBtn}
+                      onPress={confirmarAcao}
                     >
-                        {/* Mensagem sobre navegação (opcional para mobile) */}
-                        {!isLargeScreen && (
-                            <View style={styles.mobileHint}>
-                                <Text style={styles.mobileHintText}>
-                                    📱 Use a barra inferior para navegar
-                                </Text>
-                            </View>
-                        )}
+                      <Text style={styles.confirmBtnText}>Confirmar</Text>
+                    </TouchableOpacity>
 
-                        <View style={styles.pageContent}>
-                            {/* Cabeçalho */}
-                            <View style={styles.header}>
-                                <View style={styles.headerText}>
-                                    <Text style={styles.title}>Chat com IA</Text>
-                                    <Text style={styles.subtitle}>
-                                        {'Converse com seu assistente financeiro pessoal'}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.chatContainer}>
-                                {/* Sugestões */}
-                                <ChatSuggestions onSelectSuggestion={handleSendMessage} />
-
-                                {/* Área de mensagens */}
-                                <ScrollView 
-                                    style={styles.messagesContainer}
-                                    showsVerticalScrollIndicator={false}
-                                    contentContainerStyle={styles.messagesContent}
-                                >
-                                    {messages.map((message) => (
-                                        <ChatMessage
-                                            key={message.id}
-                                            message={message.content}
-                                            isUser={message.isUser}
-                                            timestamp={message.timestamp}
-                                        />
-                                    ))}
-
-                                    {isLoading && (
-                                        <View style={styles.loadingMessage}>
-                                            <View style={styles.avatar}>
-                                                <Text style={styles.avatarText}>IA</Text>
-                                            </View>
-                                            <View style={styles.loadingBubble}>
-                                                <View style={styles.typingIndicator}>
-                                                    <View style={[styles.dot, styles.dot1]}></View>
-                                                    <View style={[styles.dot, styles.dot2]}></View>
-                                                    <View style={[styles.dot, styles.dot3]}></View>
-                                                </View>
-                                            </View>
-                                        </View>
-                                    )}
-                                </ScrollView>
-
-                                {/* Input */}
-                                <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
-                            </View>
-                        </View>
-                    </KeyboardAvoidingView>
+                    <TouchableOpacity
+                      style={styles.cancelBtn}
+                      onPress={cancelarAcao}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancelar</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-            </View>
+              )}
+
+              {isLoading && <ActivityIndicator style={{ margin: 16 }} />}
+            </ScrollView>
+
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              disabled={isLoading || chatState === "AGUARDANDO_CONFIRMACAO"}
+            />
+          </KeyboardAvoidingView>
         </View>
-    );
+      </View>
+    </View>
+  );
 }
 
-const styles = StyleSheet.create({
-    // 🔁 ESTILOS DO LAYOUT (REUTILIZÁVEIS)
-    layoutContainer: {
-        flex: 1,
-        backgroundColor: '#f8fafc',
-    },
-    content: {
-        flex: 1,
-        flexDirection: 'row',
-    },
-    sidebar: {
-        width: 256,
-        borderRightWidth: 1,
-        borderRightColor: '#e2e8f0',
-        backgroundColor: '#ffffff',
-    },
-    sidebarContent: {
-        paddingVertical: 24,
-    },
-    main: {
-        flex: 1,
-    },
-    keyboardContainer: {
-        flex: 1,
-    },
-    pageContent: {
-        flex: 1,
-    },
-    mobileHint: {
-        backgroundColor: '#dbeafe',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-        alignItems: 'center',
-    },
-    mobileHintText: {
-        color: '#1e40af',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f5f5f5',
-        gap: 16,
-    },
-    loadingText: {
-        fontSize: 16,
-        color: '#666666',
-    },
+/* =========================
+   STYLES
+========================= */
 
-    // 🔽 ESTILOS ESPECÍFICOS DA TELA CHAT 🔽
-    header: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-        backgroundColor: '#ffffff',
-    },
-    headerText: {
-        flex: 1,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#6b7280',
-    },
-    chatContainer: {
-        flex: 1,
-        backgroundColor: '#f5f5f5',
-    },
-    messagesContainer: {
-        flex: 1,
-    },
-    messagesContent: {
-        padding: 16,
-        paddingBottom: 8,
-    },
-    loadingMessage: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 16,
-    },
-    avatar: {
-        height: 32,
-        width: 32,
-        borderRadius: 16,
-        backgroundColor: '#6b7280',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        fontSize: 12,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    loadingBubble: {
-        backgroundColor: '#e5e7eb',
-        borderRadius: 18,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        maxWidth: '80%',
-    },
-    typingIndicator: {
-        flexDirection: 'row',
-        gap: 4,
-        alignItems: 'center',
-    },
-    dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#6b7280',
-    },
-    dot1: {
-        opacity: 0.6,
-    },
-    dot2: {
-        opacity: 0.8,
-    },
-    dot3: {
-        opacity: 1,
-    },
+const styles = StyleSheet.create({
+  layoutContainer: { flex: 1, backgroundColor: "#f8fafc" },
+  content: { flex: 1, flexDirection: "row" },
+  sidebar: { width: 256, backgroundColor: "#fff" },
+  main: { flex: 1 },
+  messagesContainer: { flex: 1, padding: 16 },
+
+  confirmBox: {
+    backgroundColor: "#eef2ff",
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 12,
+  },
+  confirmText: {
+    fontSize: 14,
+    marginBottom: 8,
+    color: "#1e40af",
+  },
+  confirmButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  confirmBtn: {
+    backgroundColor: "#10b981",
+    padding: 8,
+    borderRadius: 6,
+  },
+  confirmBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  cancelBtn: {
+    backgroundColor: "#ef4444",
+    padding: 8,
+    borderRadius: 6,
+  },
+  cancelBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
 });

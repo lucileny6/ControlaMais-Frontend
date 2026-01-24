@@ -21,7 +21,7 @@ export interface User {
 
 export interface CreateReceitaDTO {
   valor: number;
-  data: string; // yyyy-MM-dd
+  data: string;
   categoria: string;
   descricao: string;
   observacao?: string;
@@ -31,7 +31,7 @@ export interface CreateReceitaDTO {
 
 export interface CreateDespesaDTO {
   valor: number;
-  data: string; // yyyy-MM-dd
+  data: string;
   categoria: string;
   descricao: string;
   observacao?: string;
@@ -43,18 +43,8 @@ export interface DashboardDTO {
   saldo: number;
   totalReceitas: number;
   totalDespesas: number;
-  transacoesRecentes: string[];
+  transacoesRecentes: any[];
   acoesRapidas: string[];
-}
-
-
-export interface TransacaoRecenteDTO {
-  id: number;
-  tipo: "RECEITA" | "DESPESA";
-  descricao: string;
-  categoria: string;
-  valor: number;
-  data: string;
 }
 
 /* =====================================================
@@ -62,97 +52,61 @@ export interface TransacaoRecenteDTO {
 ===================================================== */
 
 export class ApiService {
-  private baseUrl: string;
+  private baseUrl = "http://192.168.1.116:8080/api";
 
-  constructor() {
-    // 🔹 BASE GLOBAL DO BACKEND
-    this.baseUrl = "http://192.168.1.116:8080/api";
-
-  }
-
-  // ===== MÉTODO BASE =====
+  /* ======================
+     MÉTODO BASE
+  ====================== */
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
     const token = await AsyncStorage.getItem("authToken");
+console.log("TOKEN LIDO DO STORAGE:", token);
 
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...(options.headers || {}),
-      },
-    };
+const response = await fetch(`${this.baseUrl}${endpoint}`, {
+  ...options,
+  headers: {
+    "Content-Type": "application/json",
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...(options.headers || {}),
+  },
+});
 
-    try {
-      console.log("API Request:", url, config);
-
-      const response = await fetch(url, config);
-
-      if (!response.ok) {
-        const errorBody: any = await response.json().catch(() => null);
-        throw new Error(
-          errorBody?.message || `Erro HTTP ${response.status}`,
-        );
-      }
-
-      return (await response.json()) as T;
-    } catch (error) {
-      console.error("Erro na API:", error);
-      throw error;
+    if (!response.ok) {
+      const error:any = await response.json().catch(() => null);
+      throw new Error(error?.message || "Erro na API");
     }
+
+  return (await response.json()) as T;
+
   }
 
-  /* =====================================================
-     AUTH / USER
-  ===================================================== */
+  /* ======================
+     AUTH
+  ====================== */
 
-  async login(
-    email: string,
-    password: string,
-  ): Promise<ApiResponse<{ user: User; token: string }>> {
+  async login(email: string, password: string) {
     return this.request("/users/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
   }
 
-  async register(
-    name: string,
-    email: string,
-    password: string,
-  ): Promise<ApiResponse<{ user: User; token: string }>> {
+  async register(name: string, email: string, password: string) {
     return this.request("/users/register", {
       method: "POST",
-      body: JSON.stringify({
-        username: name,
-        email,
-        password,
-      }),
+      body: JSON.stringify({ username: name, email, password }),
     });
   }
 
-  async logout(): Promise<void> {
+  async logout() {
     await AsyncStorage.multiRemove(["authToken", "user"]);
   }
 
-  async getCurrentUser(): Promise<User> {
-    return this.request("/me");
-  }
-
-  async updateUser(userData: Partial<User>): Promise<User> {
-    return this.request("/profile", {
-      method: "PUT",
-      body: JSON.stringify(userData),
-    });
-  }
-
-  /* =====================================================
-     RECEITA
-  ===================================================== */
+  /* ======================
+     RECEITA / DESPESA
+  ====================== */
 
   async createReceita(dto: CreateReceitaDTO) {
     return this.request("/receitas", {
@@ -161,10 +115,6 @@ export class ApiService {
     });
   }
 
-  /* =====================================================
-     DESPESA
-  ===================================================== */
-
   async createDespesa(dto: CreateDespesaDTO) {
     return this.request("/despesas", {
       method: "POST",
@@ -172,15 +122,54 @@ export class ApiService {
     });
   }
 
-  /* =====================================================
+  /* ======================
+     TRANSAÇÕES (CRUD)
+  ====================== */
+
+  async getTransactions() {
+    return this.request<any[]>("/transactions");
+  }
+
+  async createTransaction(dto: any) {
+    return this.request("/transactions", {
+      method: "POST",
+      body: JSON.stringify(dto),
+    });
+  }
+
+  async updateTransaction(id: string, dto: any) {
+    return this.request(`/transactions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(dto),
+    });
+  }
+
+  async deleteTransaction(id: string) {
+    return this.request(`/transactions/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  /* ======================
      DASHBOARD
-  ===================================================== */
+  ====================== */
 
   async getDashboard(): Promise<DashboardDTO> {
-  return this.request("/dashboard");
+  const response = await this.request<any>("/dashboard");
+
+  console.log("DASHBOARD RAW DO BACKEND:", response);
+
+  return {
+    saldo: response.saldoTotal ??  0,
+    totalReceitas: response.totalReceitas ?? 0,
+    totalDespesas: response.totalDespesas ?? 0,
+    transacoesRecentes: response.transacoesRecentes ?? [],
+    acoesRapidas: response.acoesRapidas ?? [],
+  };
 }
 
 }
+
 /* =====================================================
    INSTÂNCIA ÚNICA
 ===================================================== */

@@ -17,9 +17,12 @@ export function FinancialOverview() {
     const fetchDashboard = async () => {
       try {
         const dashboard = await apiService.getDashboard();
+        console.log("Dashboard recebido:", dashboard);
+
 
         setData({
           balance: dashboard.saldo ?? 0,
+
           income: dashboard.totalReceitas ?? 0,
           expenses: dashboard.totalDespesas ?? 0,
         });
@@ -71,9 +74,13 @@ export function FinancialOverview() {
           <CardTitle style={styles.cardTitleStyle}>Saldo Total</CardTitle>
         </CardHeader>
         <CardContent>
-          <Text style={styles.amountPrimary}>
-            R$ {balance.toLocaleString("pt-BR")}
-          </Text>
+         <Text style={styles.amountPrimary}>
+  {balance.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  })}
+</Text>
+
         </CardContent>
       </Card>
 
@@ -83,8 +90,12 @@ export function FinancialOverview() {
         </CardHeader>
         <CardContent>
           <Text style={styles.amountIncome}>
-            R$ {income.toLocaleString("pt-BR")}
+          {income.toLocaleString("pt-BR", {
+         style: "currency",
+         currency: "BRL",
+          })}
           </Text>
+
           <Text style={styles.subtitle}>Este mês</Text>
         </CardContent>
       </Card>
@@ -95,8 +106,12 @@ export function FinancialOverview() {
         </CardHeader>
         <CardContent>
           <Text style={styles.amountExpense}>
-            R$ {expenses.toLocaleString("pt-BR")}
+          {expenses.toLocaleString("pt-BR", {
+          style: "currency",
+           currency: "BRL",
+           })}
           </Text>
+
           <Text style={styles.progressText}>
             {expensePercentage.toFixed(1)}% da receita
           </Text>
