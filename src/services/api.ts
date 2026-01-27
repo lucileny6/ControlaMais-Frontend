@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AIResponse } from "@/lib/types";
+
 
 /* =====================================================
    DTOs DO FRONT (espelho do BACKEND)
@@ -48,38 +50,36 @@ export interface DashboardDTO {
 }
 
 /* =====================================================
-   API SERVICE
+   API SERVICE (INFRA HTTP)
 ===================================================== */
 
 export class ApiService {
-  private baseUrl = "http://192.168.1.116:8080/api";
+  private baseUrl = "http://localhost:8080/api";
 
   /* ======================
-     MÉTODO BASE
+     MÉTODO BASE (PRIVADO)
   ====================== */
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {},
+    options: RequestInit = {}
   ): Promise<T> {
     const token = await AsyncStorage.getItem("authToken");
-console.log("TOKEN LIDO DO STORAGE:", token);
 
-const response = await fetch(`${this.baseUrl}${endpoint}`, {
-  ...options,
-  headers: {
-    "Content-Type": "application/json",
-    ...(token && { Authorization: `Bearer ${token}` }),
-    ...(options.headers || {}),
-  },
-});
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
 
     if (!response.ok) {
-      const error:any = await response.json().catch(() => null);
+      const error: any = await response.json().catch(() => null);
       throw new Error(error?.message || "Erro na API");
     }
 
-  return (await response.json()) as T;
-
+    return (await response.json()) as T;
   }
 
   /* ======================
@@ -123,51 +123,33 @@ const response = await fetch(`${this.baseUrl}${endpoint}`, {
   }
 
   /* ======================
-     TRANSAÇÕES (CRUD)
-  ====================== */
-
-  async getTransactions() {
-    return this.request<any[]>("/transactions");
-  }
-
-  async createTransaction(dto: any) {
-    return this.request("/transactions", {
-      method: "POST",
-      body: JSON.stringify(dto),
-    });
-  }
-
-  async updateTransaction(id: string, dto: any) {
-    return this.request(`/transactions/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(dto),
-    });
-  }
-
-  async deleteTransaction(id: string) {
-    return this.request(`/transactions/${id}`, {
-      method: "DELETE",
-    });
-  }
-
-  /* ======================
      DASHBOARD
   ====================== */
 
   async getDashboard(): Promise<DashboardDTO> {
-  const response = await this.request<any>("/dashboard");
+    const response = await this.request<any>("/dashboard");
 
-  console.log("DASHBOARD RAW DO BACKEND:", response);
+    return {
+      saldo: response.saldoTotal ?? 0,
+      totalReceitas: response.totalReceitas ?? 0,
+      totalDespesas: response.totalDespesas ?? 0,
+      transacoesRecentes: response.transacoesRecentes ?? [],
+      acoesRapidas: response.acoesRapidas ?? [],
+    };
+  }
 
-  return {
-    saldo: response.saldoTotal ??  0,
-    totalReceitas: response.totalReceitas ?? 0,
-    totalDespesas: response.totalDespesas ?? 0,
-    transacoesRecentes: response.transacoesRecentes ?? [],
-    acoesRapidas: response.acoesRapidas ?? [],
-  };
-}
-
+  /* ======================
+     CHAT IA ✅ (AQUI ESTAVA FALTANDO)
+  ====================== */
+  
+  async sendChatIA(message: string): Promise<AIResponse> {
+  return this.request<AIResponse>("/chat-ia", {
+    method: "POST",
+    body: JSON.stringify({
+      mensagem: message,
+      }),
+    });
+  }
 }
 
 /* =====================================================

@@ -1,11 +1,8 @@
-// src/services/chatIA.ts
-
-import { mockIA } from "./chatIA.mock";
+import { apiService } from "@/services/api";
 import { AIResponse } from "@/lib/types";
 
 export const chatIAService = {
   async sendMessage(message: string): Promise<AIResponse> {
-    // Por enquanto usamos o mock
-    return Promise.resolve(mockIA(message));
+    return apiService.sendChatIA(message);
   },
 };
