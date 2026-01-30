@@ -1,105 +1,98 @@
-import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from "expo-router";
+import {
+  ImageBackground,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function HomeScreen() {
   const router = useRouter();
 
-  const screens = [
-    { name: 'Login', route: '/login' },
-    { name: 'Registro', route: '/register' },
-  ];
-
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Controla+</Text>
-        <Text style={styles.subtitle}>Menu de Desenvolvimento</Text>
+    <SafeAreaView style={styles.container}>
+      {/* TOP BAR */}
+      <View style={styles.topBar}>
+        <Text style={styles.logo}>Controla+</Text>
+
+        <View style={styles.topActions}>
+          {/*<TouchableOpacity onPress={() => router.push("/sobre")}>
+            <Text style={styles.sobre}>Sobre</Text>
+          </TouchableOpacity>*/}
+
+          <TouchableOpacity onPress={() => router.push("/register")}>
+            <Text style={styles.register}>Cadastrar-se</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => router.push("/login")}>
+            <Text style={styles.login}>Conectar-se</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.sectionTitle}></Text>
-        
-        {screens.map((screen, index) => (
-          <TouchableOpacity 
-            key={index}
-            style={styles.button}
-            onPress={() => router.push(screen.route as any)}
-          >
-            <Text style={styles.buttonText}>{screen.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+      {/* BANNER */}
+      <ImageBackground
+        source={require("../assets/images/banner.jpeg")} // você troca depois
+        style={styles.banner}
+        resizeMode="cover"
+      ></ImageBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "transparent",
   },
-  header: {
-    backgroundColor: '#ffffff',
-    padding: 24,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+
+  /* TOP BAR */
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: "rgba(255,255,255,0.9)",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#3b82f6',
-    marginBottom: 8,
+
+  logo: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#3b82f6",
   },
-  subtitle: {
+
+  topActions: {
+    flexDirection: "row",
+    gap: 20,
+  },
+
+  sobre: {
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#000000",
   },
-  content: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  button: {
-    backgroundColor: '#3b82f6',
-    padding: 16,
-    borderRadius: 8,
-    marginVertical: 6,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  buttonText: {
-    color: '#ffffff',
+
+  register: {
     fontSize: 16,
-    fontWeight: '600',
+    color: "#3b82f6",
+    fontWeight: "600",
   },
-  infoCard: {
-    backgroundColor: '#dbeafe',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3b82f6',
-  },
-  infoTitle: {
+
+  login: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1e40af',
-    marginBottom: 8,
+    color: "#000000",
   },
-  infoText: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
+
+  banner: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
   },
 });
