@@ -109,4 +109,21 @@ export interface AIResponse {
   mensagem: string;
   acao?: AcaoFinanceira;
 }
+export interface DashboardTransaction {
+  id: string;
+  type: "income" | "expense";
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+}
+export interface DashboardTransaction {
+  id: string;
+  type: "income" | "expense";
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+}
+
 
