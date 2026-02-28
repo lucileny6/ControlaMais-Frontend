@@ -63,12 +63,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   isLoading,
   onCancel,
 }) => {
+  const formatDateForDisplay = (value?: string) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) {
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, "0");
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    if (isoPattern.test(raw)) {
+      const [, year, month, day] = raw.match(isoPattern)!;
+      return `${day}-${month}-${year}`;
+    }
+
+    return raw;
+  };
+
   const [formData, setFormData] = useState({
     description: initialData?.description || "",
     amount: initialData?.amount?.toString() || "",
     type: initialData?.type || "income",
     category: initialData?.category || "",
-    date: initialData?.date || new Date().toISOString().split("T")[0],
+    date: formatDateForDisplay(initialData?.date),
     notes: initialData?.notes || "",
   });
 
@@ -81,7 +100,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       amount: initialData?.amount?.toString() || "",
       type: initialData?.type || "income",
       category: initialData?.category || "",
-      date: initialData?.date || new Date().toISOString().split("T")[0],
+      date: formatDateForDisplay(initialData?.date),
       notes: initialData?.notes || "",
     });
   }, [initialData]);
@@ -193,6 +212,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <Text style={styles.label}>Data</Text>
           <TextInput
             style={styles.input}
+            placeholder="DD-MM-AAAA"
             value={formData.date}
             onChangeText={(v) =>
               setFormData((p) => ({ ...p, date: v }))

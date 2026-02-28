@@ -24,7 +24,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
 
   const handleKeyPress = ({ nativeEvent }: any) => {
     if (nativeEvent.key === 'Enter' && !nativeEvent.shiftKey) {
-      nativeEvent.preventDefault();
+      nativeEvent.preventDefault?.();
       handleSubmit();
     }
   };
@@ -43,6 +43,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
         editable={!disabled}
         multiline
         maxLength={500}
+        onKeyPress={handleKeyPress}
         onSubmitEditing={handleSubmit}
         blurOnSubmit={false}
       />

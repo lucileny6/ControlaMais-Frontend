@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,14 +25,49 @@ interface TransactionListProps {
   transactions: Transaction[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
+  initialStartDate?: string;
+  initialEndDate?: string;
+  onFilteredDataChange?: (filtered: Transaction[]) => void;
+  onExportContextChange?: (context: {
+    filtered: Transaction[];
+    filterType: "all" | "income" | "expense";
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+  }) => void;
 }
 
-export function TransactionList({ transactions, onEdit, onDelete }: TransactionListProps) {
+export function TransactionList({
+  transactions,
+  onEdit,
+  onDelete,
+  initialStartDate = "",
+  initialEndDate = "",
+  onFilteredDataChange,
+  onExportContextChange,
+}: TransactionListProps) {
+  const toMonthYear = (value: string) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    if (isoPattern.test(raw)) {
+      const [, year, month, day] = raw.match(isoPattern)!;
+      return `${month}-${year}`;
+    }
+    return raw;
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [startDate, setStartDate] = useState(toMonthYear(initialStartDate));
+  const [endDate, setEndDate] = useState(toMonthYear(initialEndDate));
+
+  useEffect(() => {
+    setStartDate(toMonthYear(initialStartDate));
+    setEndDate(toMonthYear(initialEndDate));
+  }, [initialStartDate, initialEndDate]);
   const normalizeCategory = (value: string) =>
     value
       .normalize("NFD")
@@ -39,12 +75,15 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
       .trim()
       .toLowerCase();
 
-  const parseDateValue = (value: string) => {
+  const parseDateValue = (value: string, endOfMonth = false) => {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
 
     const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
     const brPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+    const monthYearPattern = /^(\d{2})-(\d{4})$/;
+    const isoMonthPattern = /^(\d{4})-(\d{2})$/;
 
     let parsed: Date;
     if (isoPattern.test(raw)) {
@@ -53,6 +92,25 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
     } else if (brPattern.test(raw)) {
       const [, day, month, year] = raw.match(brPattern)!;
       parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (brDashPattern.test(raw)) {
+      const [, day, month, year] = raw.match(brDashPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (monthYearPattern.test(raw)) {
+      const [, month, year] = raw.match(monthYearPattern)!;
+      if (endOfMonth) {
+        const lastDay = new Date(Number(year), Number(month), 0).getDate();
+        parsed = new Date(Number(year), Number(month) - 1, lastDay);
+      } else {
+        parsed = new Date(Number(year), Number(month) - 1, 1);
+      }
+    } else if (isoMonthPattern.test(raw)) {
+      const [, year, month] = raw.match(isoMonthPattern)!;
+      if (endOfMonth) {
+        const lastDay = new Date(Number(year), Number(month), 0).getDate();
+        parsed = new Date(Number(year), Number(month) - 1, lastDay);
+      } else {
+        parsed = new Date(Number(year), Number(month) - 1, 1);
+      }
     } else {
       parsed = new Date(raw);
     }
@@ -71,8 +129,8 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
       filterCategory === "all" ||
       normalizeCategory(category) === normalizeCategory(filterCategory);
     const transactionDate = parseDateValue(String(transaction?.date ?? ""));
-    const start = parseDateValue(startDate);
-    const end = parseDateValue(endDate);
+    const start = parseDateValue(startDate, false);
+    const end = parseDateValue(endDate, true);
     if (start) start.setHours(0, 0, 0, 0);
     if (end) end.setHours(23, 59, 59, 999);
 
@@ -105,7 +163,6 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
     return matchesSearch && matchesType && matchesCategory && matchesDate;
   });
 
-  const totalTransactions = filteredTransactions.length;
   const totalIncome = filteredTransactions
     .filter((transaction) => transaction.type === "income")
     .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
@@ -113,6 +170,20 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
     .filter((transaction) => transaction.type === "expense")
     .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
   const balance = totalIncome - totalExpense;
+
+  useEffect(() => {
+    onFilteredDataChange?.(filteredTransactions);
+  }, [filteredTransactions, onFilteredDataChange]);
+
+  useEffect(() => {
+    onExportContextChange?.({
+      filtered: filteredTransactions,
+      filterType,
+      totalIncome,
+      totalExpense,
+      balance,
+    });
+  }, [filteredTransactions, filterType, totalIncome, totalExpense, balance, onExportContextChange]);
 
   const categories = Array.from(
     new Set(
@@ -122,6 +193,14 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
     )
   );
 
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStartDate("");
+    setEndDate("");
+    setFilterCategory("all");
+    setFilterType("all");
+  };
+
   const formatCurrency = (amount: number) => {
     return Math.abs(amount).toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
@@ -129,72 +208,59 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR");
+    const date = parseDateValue(dateString);
+    if (!date) return dateString;
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${month}-${year}`;
   };
 
   const renderTransactionItem = ({ item }: { item: Transaction }) => (
-    <View style={styles.transactionCard}>
+    <View
+      style={[
+        styles.transactionCard,
+        item.type === "income" ? styles.transactionCardIncome : styles.transactionCardExpense,
+      ]}
+    >
       <View style={styles.transactionHeader}>
         <View style={styles.transactionInfo}>
-          <View style={styles.titleRow}>
+          <View style={styles.headlineRow}>
+            <View
+              style={[
+                styles.typeDot,
+                item.type === "income" ? styles.typeDotIncome : styles.typeDotExpense,
+              ]}
+            />
             <Text style={styles.description}>{item.description}</Text>
-            <View style={styles.badgeContainer}>
-              <View style={[styles.badge, styles.categoryBadge]}>
-                <Text style={styles.badgeText}>{item.category}</Text>
-              </View>
-              <View style={[
-                styles.badge, 
-                item.type === "income" ? styles.incomeBadge : styles.expenseBadge
-              ]}>
-                <Text style={styles.badgeText}>
-                  {item.type === "income" ? "Receita" : "Despesa"}
-                </Text>
-              </View>
-            </View>
           </View>
 
-          <View style={styles.detailsRow}>
-            <Text style={styles.date}>{formatDate(item.date)}</Text>
-            {item.notes && (
-              <Text style={styles.notes} numberOfLines={1}>
-                {item.notes}
-              </Text>
-            )}
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>📂 {item.category}</Text>
+            <Text style={styles.metaText}>📅 {formatDate(item.date)}</Text>
           </View>
         </View>
 
-        <View style={styles.transactionActions}>
-          <View style={styles.amountContainer}>
-            <Text style={[
+        <View style={styles.amountContainer}>
+          <Text
+            style={[
               styles.amount,
-              item.type === "income" ? styles.incomeAmount : styles.expenseAmount
-            ]}>
-              {item.type === "income" ? "+" : "-"} R$ {formatCurrency(item.amount)}
-            </Text>
-          </View>
-
-          <Pressable 
-            style={styles.menuButton}
-            onPress={() => {
-              onEdit(item);
-            }}
-            hitSlop={8}
+              item.type === "income" ? styles.incomeAmount : styles.expenseAmount,
+            ]}
           >
-            <Text style={styles.menuButtonText}>⋮</Text>
-          </Pressable>
+            {item.type === "income" ? "+" : "-"} R$ {formatCurrency(item.amount)}
+          </Text>
         </View>
       </View>
 
-      {/* Botoes de acao */}
       <View style={styles.actionButtons}>
-        <Pressable 
+        <Pressable
           style={[styles.actionButton, styles.editButton]}
           onPress={() => onEdit(item)}
           hitSlop={8}
         >
           <Text style={styles.actionButtonText}>Editar</Text>
         </Pressable>
-        <Pressable 
+        <Pressable
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete(item.id)}
           hitSlop={8}
@@ -204,131 +270,147 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
       </View>
     </View>
   );
-
   return (
     <View style={styles.container}>
       {/* Filtros */}
       <View style={styles.filtersContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar transacoes..."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-        />
-
-        <View style={styles.dateFilterRow}>
-          <TextInput
-            style={styles.dateInput}
-            placeholder="Data inicial (AAAA-MM-DD)"
-            value={startDate}
-            onChangeText={setStartDate}
-          />
-          <TextInput
-            style={styles.dateInput}
-            placeholder="Data final (AAAA-MM-DD)"
-            value={endDate}
-            onChangeText={setEndDate}
-          />
-        </View>
-
-        <View style={styles.filterRow}>
-          <TouchableOpacity 
-            style={[
-              styles.filterButton,
-              filterType === "all" && styles.filterButtonActive
-            ]}
-            onPress={() => setFilterType("all")}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              filterType === "all" && styles.filterButtonTextActive
-            ]}>Todos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[
-              styles.filterButton,
-              filterType === "income" && styles.filterButtonActive
-            ]}
-            onPress={() => setFilterType("income")}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              filterType === "income" && styles.filterButtonTextActive
-            ]}>Receitas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[
-              styles.filterButton,
-              filterType === "expense" && styles.filterButtonActive
-            ]}
-            onPress={() => setFilterType("expense")}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              filterType === "expense" && styles.filterButtonTextActive
-            ]}>Despesas</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Filtro de categoria */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.categoriesContainer}
+          contentContainerStyle={styles.toolbarRow}
         >
-          <TouchableOpacity 
-            style={[
-              styles.categoryChip,
-              filterCategory === "all" && styles.categoryChipActive
-            ]}
-            onPress={() => setFilterCategory("all")}
-          >
-            <Text style={[
-              styles.categoryChipText,
-              filterCategory === "all" && styles.categoryChipTextActive
-            ]}>Todas</Text>
-          </TouchableOpacity>
-          
-          {categories.map((category, index) => (
-            <TouchableOpacity 
-              key={`${category}-${index}`}
-              style={[
-                styles.categoryChip,
-                filterCategory === category && styles.categoryChipActive
-              ]}
-              onPress={() => setFilterCategory(category)}
+          <View style={styles.toolbarItem}>
+            <Text style={styles.toolbarLabel}>Buscar</Text>
+            <TextInput
+              style={styles.toolbarInput}
+              placeholder="Descricao..."
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+            />
+          </View>
+
+          <View style={styles.toolbarItem}>
+            <Text style={styles.toolbarLabel}>Periodo</Text>
+            <View style={styles.toolbarPeriodRow}>
+              <TextInput
+                style={styles.toolbarDateInput}
+                placeholder="Inicio (MM-AAAA)"
+                value={startDate}
+                onChangeText={setStartDate}
+              />
+              <TextInput
+                style={styles.toolbarDateInput}
+                placeholder="Fim (MM-AAAA)"
+                value={endDate}
+                onChangeText={setEndDate}
+              />
+            </View>
+          </View>
+
+          <View style={styles.toolbarItem}>
+            <Text style={styles.toolbarLabel}>Categoria</Text>
+            <TouchableOpacity
+              style={styles.toolbarSelect}
+              onPress={() => setCategoryPickerOpen(true)}
             >
-              <Text style={[
-                styles.categoryChipText,
-                filterCategory === category && styles.categoryChipTextActive
-              ]}>{category}</Text>
+              <Text style={styles.toolbarSelectText}>
+                {filterCategory === "all" ? "Todas" : filterCategory}
+              </Text>
             </TouchableOpacity>
-          ))}
+          </View>
+
+          <View style={styles.toolbarItem}>
+            <Text style={styles.toolbarLabel}>Tipo</Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
+                style={[styles.typeButton, filterType === "all" && styles.typeButtonActive]}
+                onPress={() => setFilterType("all")}
+              >
+                <Text style={[styles.typeButtonText, filterType === "all" && styles.typeButtonTextActive]}>
+                  Todos
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeButton, filterType === "income" && styles.typeButtonActive]}
+                onPress={() => setFilterType("income")}
+              >
+                <Text style={[styles.typeButtonText, filterType === "income" && styles.typeButtonTextActive]}>
+                  Receitas
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeButton, filterType === "expense" && styles.typeButtonActive]}
+                onPress={() => setFilterType("expense")}
+              >
+                <Text style={[styles.typeButtonText, filterType === "expense" && styles.typeButtonTextActive]}>
+                  Despesas
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+            <Text style={styles.clearFiltersText}>Limpar filtros</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Total de transacoes</Text>
-          <Text style={styles.summaryValue}>{totalTransactions}</Text>
+      <Modal visible={categoryPickerOpen} transparent animationType="fade" onRequestClose={() => setCategoryPickerOpen(false)}>
+        <View style={styles.categoryModalOverlay}>
+          <View style={styles.categoryModalContent}>
+            <Text style={styles.categoryModalTitle}>Selecionar categoria</Text>
+            <ScrollView style={styles.categoryModalList}>
+              <TouchableOpacity
+                style={[styles.categoryOption, filterCategory === "all" && styles.categoryOptionActive]}
+                onPress={() => {
+                  setFilterCategory("all");
+                  setCategoryPickerOpen(false);
+                }}
+              >
+                <Text style={styles.categoryOptionText}>Todas</Text>
+              </TouchableOpacity>
+              {categories.map((category, index) => (
+                <TouchableOpacity
+                  key={`${category}-${index}`}
+                  style={[styles.categoryOption, filterCategory === category && styles.categoryOptionActive]}
+                  onPress={() => {
+                    setFilterCategory(category);
+                    setCategoryPickerOpen(false);
+                  }}
+                >
+                  <Text style={styles.categoryOptionText}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.categoryCloseButton} onPress={() => setCategoryPickerOpen(false)}>
+              <Text style={styles.categoryCloseButtonText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.summaryCard}>
+      </Modal>
+
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, styles.summaryIncomeCard]}>
           <Text style={styles.summaryLabel}>Receitas</Text>
           <Text style={[styles.summaryValue, styles.incomeText]}>
             R$ {formatCurrency(totalIncome)}
           </Text>
         </View>
-        <View style={styles.summaryCard}>
+        <View style={[styles.summaryCard, styles.summaryExpenseCard]}>
           <Text style={styles.summaryLabel}>Despesas</Text>
           <Text style={[styles.summaryValue, styles.expenseText]}>
             R$ {formatCurrency(totalExpense)}
           </Text>
         </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Saldo</Text>
-          <Text style={[styles.summaryValue, balance >= 0 ? styles.incomeText : styles.expenseText]}>
+        <View style={[styles.summaryCard, styles.summaryBalanceCard]}>
+          <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>Saldo</Text>
+          <Text
+            style={[
+              styles.summaryValue,
+              styles.summaryBalanceValue,
+              balance >= 0 ? styles.summaryBalancePositive : styles.summaryBalanceNegative,
+            ]}
+          >
             R$ {formatCurrency(balance)}
           </Text>
         </View>
@@ -337,10 +419,14 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
       {/* Lista de transacoes */}
       {filteredTransactions.length === 0 ? (
         <View style={styles.emptyState}>
+          <View style={styles.emptyStateIcon}>
+            <Text style={styles.emptyStateIconMark}>-</Text>
+          </View>
           <Text style={styles.emptyStateText}>
-            {searchTerm || filterType !== "all" || filterCategory !== "all"
-              ? "Nenhuma transacao encontrada com os filtros aplicados."
-              : "Nenhuma transacao registrada ainda."}
+            Nenhuma transacao encontrada neste periodo.
+          </Text>
+          <Text style={styles.emptyStateHint}>
+            Ajuste os filtros ou troque o periodo para visualizar lancamentos.
           </Text>
         </View>
       ) : (
@@ -361,76 +447,148 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filtersContainer: {
-    gap: 10,
+    gap: 8,
     marginBottom: 10,
   },
-  searchInput: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    fontSize: 14,
-  },
-  filterRow: {
+  toolbarRow: {
     flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: 10,
+    paddingBottom: 2,
   },
-  dateFilterRow: {
-    flexDirection: 'row',
-    gap: 8,
+  toolbarItem: {
+    gap: 6,
+    minWidth: 150,
   },
-  dateInput: {
-    flex: 1,
+  toolbarLabel: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  toolbarInput: {
     backgroundColor: '#ffffff',
     paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e5e5e5',
-    fontSize: 13,
+    fontSize: 12,
+    minWidth: 180,
   },
-  filterButton: {
-    paddingHorizontal: 12,
+  toolbarPeriodRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  toolbarDateInput: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
     paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    fontSize: 12,
+    minWidth: 94,
+  },
+  toolbarSelect: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 140,
+  },
+  toolbarSelectText: {
+    fontSize: 12,
+    color: '#0f172a',
+    fontWeight: '500',
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  typeButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 6,
     backgroundColor: '#f5f5f5',
     alignItems: 'center',
-    minWidth: 95,
+    minHeight: 27,
+    justifyContent: 'center',
   },
-  filterButtonActive: {
+  typeButtonActive: {
     backgroundColor: '#000000',
   },
-  filterButtonText: {
-    fontSize: 13,
-    color: '#666666',
-    fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    color: '#ffffff',
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
-  },
-  categoryChipActive: {
-    backgroundColor: '#000000',
-  },
-  categoryChipText: {
+  typeButtonText: {
     fontSize: 11,
     color: '#666666',
     fontWeight: '500',
   },
-  categoryChipTextActive: {
+  typeButtonTextActive: {
     color: '#ffffff',
+  },
+  clearFiltersButton: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  clearFiltersText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  categoryModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  categoryModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '75%',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  categoryModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  categoryModalList: {
+    maxHeight: 280,
+  },
+  categoryOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  categoryOptionActive: {
+    backgroundColor: '#f1f5f9',
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    color: '#0f172a',
+  },
+  categoryCloseButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  categoryCloseButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 12,
   },
   listContent: {
     gap: 8,
@@ -438,29 +596,59 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
+    gap: 10,
+    marginBottom: 12,
   },
   summaryCard: {
-    flexGrow: 0,
-    minWidth: 130,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    flex: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    minHeight: 82,
+    justifyContent: 'center',
+  },
+  summaryIncomeCard: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#86efac',
+  },
+  summaryExpenseCard: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+  },
+  summaryBalanceCard: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+    minHeight: 96,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   summaryLabel: {
-    fontSize: 11,
-    color: '#666666',
-    marginBottom: 2,
+    fontSize: 13,
+    color: '#334155',
+    marginBottom: 4,
+    fontWeight: '600',
   },
   summaryValue: {
-    fontSize: 14,
+    fontSize: 24,
     fontWeight: '700',
     color: '#111111',
+  },
+  summaryBalanceLabel: {
+    color: '#cbd5e1',
+  },
+  summaryBalanceValue: {
+    fontSize: 30,
+    fontWeight: '800',
+  },
+  summaryBalancePositive: {
+    color: '#5eead4',
+  },
+  summaryBalanceNegative: {
+    color: '#fca5a5',
   },
   incomeText: {
     color: '#16a34a',
@@ -470,93 +658,69 @@ const styles = StyleSheet.create({
   },
   transactionCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
+    paddingLeft: 14,
     elevation: 2,
+    borderLeftWidth: 5,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  transactionCardIncome: {
+    borderLeftColor: '#16a34a',
+  },
+  transactionCardExpense: {
+    borderLeftColor: '#dc2626',
   },
   transactionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    gap: 8,
   },
   transactionInfo: {
-    flex: 1,
-    marginRight: 10,
+    gap: 6,
   },
-  titleRow: {
+  headlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 4,
+    gap: 6,
+  },
+  typeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  typeDotIncome: {
+    backgroundColor: '#22c55e',
+  },
+  typeDotExpense: {
+    backgroundColor: '#ef4444',
   },
   description: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#000000',
-    marginRight: 6,
+    color: '#0f172a',
   },
-  badgeContainer: {
+  metaRow: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  categoryBadge: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-  },
-  incomeBadge: {
-    backgroundColor: '#dcfce7',
-  },
-  expenseBadge: {
-    backgroundColor: '#fee2e2',
-  },
-  badgeText: {
-    fontSize: 10,
+  metaText: {
+    fontSize: 12,
+    color: '#64748b',
     fontWeight: '500',
   },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  date: {
-    fontSize: 12,
-    color: '#666666',
-  },
-  notes: {
-    fontSize: 12,
-    color: '#666666',
-    flex: 1,
-  },
-  transactionActions: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
   amountContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   amount: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '800',
   },
   incomeAmount: {
     color: '#16a34a', // green-600
   },
   expenseAmount: {
     color: '#dc2626', // red-600
-  },
-  menuButton: {
-    padding: 4,
-  },
-  menuButtonText: {
-    fontSize: 18,
-    color: '#666666',
-    fontWeight: 'bold',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -588,14 +752,40 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     backgroundColor: '#ffffff',
-    padding: 24,
+    padding: 28,
     borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 10,
+  },
+  emptyStateIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  emptyStateIconMark: {
+    fontSize: 18,
+    lineHeight: 18,
+    color: '#64748b',
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#666666',
+    fontSize: 15,
+    color: '#334155',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptyStateHint: {
+    fontSize: 12,
+    color: '#64748b',
     textAlign: 'center',
   },
 });
+
+
 

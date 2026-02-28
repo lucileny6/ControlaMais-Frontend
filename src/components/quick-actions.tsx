@@ -17,7 +17,7 @@ export function QuickActions() {
 
   const actions: ActionItem[] = [
     {
-      href: "/transactions?type=receita",
+      href: "/(tabs)/transactions?new=1&type=income&source=dashboard",
       title: "Adicionar Receita",
       description: "Registre uma nova entrada de dinheiro",
       icon: (
@@ -27,7 +27,7 @@ export function QuickActions() {
       ),
     },
     {
-      href: "/(tabs)/transactions",
+      href: "/(tabs)/transactions?new=1&type=expense&source=dashboard",
       title: "Adicionar Despesa",
       description: "Registre um novo gasto",
       icon: (
