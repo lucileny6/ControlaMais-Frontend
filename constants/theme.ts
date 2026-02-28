@@ -27,6 +27,10 @@ export const Colors = {
   },
 };
 
+export const BrandColors = {
+  primaryButton: "#0F766E",
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

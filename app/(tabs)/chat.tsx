@@ -1,11 +1,10 @@
-import { ChatInput } from '@/components/chat-input';
-import { ChatMessage } from '@/components/chat-message';
-import { ChatSuggestions } from '@/components/chat-suggestion';
-import { DashboardHeader } from '@/components/dashboard-header';
-import { DashboardNav } from '@/components/dashboard-nav';
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from 'react';
+import { ChatInput } from "@/components/chat-input";
+import { ChatMessage } from "@/components/chat-message";
+import { DashboardHeader } from "@/components/dashboard-header";
+import { DashboardNav } from "@/components/dashboard-nav";
+import { chatIAService } from "@/services/chatIA";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,18 +12,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  useWindowDimensions
-} from 'react-native';
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-
-/* =========================
-   TYPES
-========================= */
-
-type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
 
 interface Message {
   id: string;
@@ -33,70 +25,14 @@ interface Message {
   timestamp: Date;
 }
 
-interface AcaoFinanceira {
-  tipo: "RECEITA" | "DESPESA";
-  valor: number;
-  categoria: string;
-  descricao: string;
-  data: string;
-}
-
 interface AIResponse {
   tipo: "TEXTO" | "CONFIRMACAO";
   mensagem: string;
-  acao?: AcaoFinanceira;
 }
 
-/* =========================
-   MOCK IA (TEMPORÁRIO)
-========================= */
-
-const mockIA = (mensagem: string): AIResponse => {
-  const text = mensagem.toLowerCase();
-
-  if (text.includes("paguei") || text.includes("gastei")) {
-    return {
-      tipo: "CONFIRMACAO",
-      mensagem:
-        "Entendi que você quer cadastrar a seguinte despesa. Confirma?",
-      acao: {
-        tipo: "DESPESA",
-        valor: 80,
-        categoria: "Internet",
-        descricao: "Conta de internet",
-        data: "2024-03-20",
-      },
-    };
-  }
-
-  if (text.includes("recebi") || text.includes("salário")) {
-    return {
-      tipo: "CONFIRMACAO",
-      mensagem:
-        "Entendi que você quer cadastrar a seguinte receita. Confirma?",
-      acao: {
-        tipo: "RECEITA",
-        valor: 1200,
-        categoria: "Salário",
-        descricao: "Salário mensal",
-        data: "2024-03-20",
-      },
-    };
-  }
-
-  return {
-    tipo: "TEXTO",
-    mensagem:
-      "Posso te ajudar a cadastrar receitas ou despesas. Exemplo: 'Paguei 80 de internet ontem'.",
-  };
-};
-
-/* =========================
-   COMPONENT
-========================= */
+const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
 
 export default function ChatPage() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
@@ -105,17 +41,18 @@ export default function ChatPage() {
     {
       id: "1",
       content:
-        "Olá! Posso te ajudar a cadastrar receitas e despesas usando linguagem natural.",
+        "OlÃ¡! Posso te ajudar a registrar receitas e despesas usando linguagem natural ðŸ˜Š",
       isUser: false,
       timestamp: new Date(),
     },
   ]);
 
-  const [chatState, setChatState] = useState<ChatState>("NORMAL");
-  const [acaoPendente, setAcaoPendente] = useState<AcaoFinanceira | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim()) return;
+
     const userMessage: Message = {
       id: Date.now().toString(),
       content,
@@ -123,11 +60,11 @@ export default function ChatPage() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const response = mockIA(content);
+    try {
+      const response: AIResponse = await chatIAService.sendMessage(content);
 
       const iaMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -136,119 +73,94 @@ export default function ChatPage() {
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, iaMessage]);
+      setMessages((prev) => [...prev, iaMessage]);
+      setAguardandoConfirmacao(response.tipo === "CONFIRMACAO");
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          content: "Erro ao comunicar com o servidor ðŸ˜•",
+          isUser: false,
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
       setIsLoading(false);
-
-      if (response.tipo === "CONFIRMACAO" && response.acao) {
-        setChatState("AGUARDANDO_CONFIRMACAO");
-        setAcaoPendente(response.acao);
-      }
-    }, 800);
+    }
   };
 
-  const confirmarAcao = () => {
-    if (!acaoPendente) return;
-
-    setMessages(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        content: "✅ Ação confirmada! (mock – ainda não salva no banco)",
-        isUser: false,
-        timestamp: new Date(),
-      },
-    ]);
-
-    setChatState("NORMAL");
-    setAcaoPendente(null);
+  const confirmar = () => {
+    setAguardandoConfirmacao(false);
+    handleSendMessage("sim");
   };
 
-  const cancelarAcao = () => {
-    setMessages(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        content: "❌ Ok, ação cancelada. Pode corrigir ou tentar novamente.",
-        isUser: false,
-        timestamp: new Date(),
-      },
-    ]);
-
-    setChatState("NORMAL");
-    setAcaoPendente(null);
+  const cancelar = () => {
+    setAguardandoConfirmacao(false);
+    handleSendMessage("cancelar");
   };
 
   return (
-    <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
-      <DashboardHeader />
+    <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
+      <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
+        <DashboardHeader />
 
-      <View style={styles.content}>
-        {isLargeScreen && (
-          <View style={styles.sidebar}>
-            <DashboardNav />
-          </View>
-        )}
+        <View style={styles.content}>
+          {isLargeScreen && (
+            <View style={styles.sidebar}>
+              <DashboardNav />
+            </View>
+          )}
 
-        <View style={styles.main}>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-          >
-            <ScrollView style={styles.messagesContainer}>
-              {messages.map(msg => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg.content}
-                  isUser={msg.isUser}
-                  timestamp={msg.timestamp}
-                />
-              ))}
+          <View style={styles.main}>
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+            >
+              <ScrollView style={styles.messagesContainer}>
+                {messages.map((msg) => (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg.content}
+                    isUser={msg.isUser}
+                    timestamp={msg.timestamp}
+                  />
+                ))}
 
-              {chatState === "AGUARDANDO_CONFIRMACAO" && acaoPendente && (
-                <View style={styles.confirmBox}>
-                  <Text style={styles.confirmText}>
-                    {acaoPendente.tipo} • R$ {acaoPendente.valor} •{" "}
-                    {acaoPendente.categoria}
-                  </Text>
+                {aguardandoConfirmacao && (
+                  <View style={styles.confirmBox}>
+                    <Text style={styles.confirmText}>Deseja confirmar a aÃ§Ã£o?</Text>
 
-                  <View style={styles.confirmButtons}>
-                    <TouchableOpacity
-                      style={styles.confirmBtn}
-                      onPress={confirmarAcao}
-                    >
-                      <Text style={styles.confirmBtnText}>Confirmar</Text>
-                    </TouchableOpacity>
+                    <View style={styles.confirmButtons}>
+                      <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
+                        <Text style={styles.confirmBtnText}>Confirmar</Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={cancelarAcao}
-                    >
-                      <Text style={styles.cancelBtnText}>Cancelar</Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity style={styles.cancelBtn} onPress={cancelar}>
+                        <Text style={styles.cancelBtnText}>Cancelar</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
 
-              {isLoading && <ActivityIndicator style={{ margin: 16 }} />}
-            </ScrollView>
+                {isLoading && <ActivityIndicator style={{ margin: 16 }} />}
+              </ScrollView>
 
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              disabled={isLoading || chatState === "AGUARDANDO_CONFIRMACAO"}
-            />
-          </KeyboardAvoidingView>
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                disabled={isLoading || aguardandoConfirmacao}
+              />
+            </KeyboardAvoidingView>
+          </View>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
-/* =========================
-   STYLES
-========================= */
-
 const styles = StyleSheet.create({
-  layoutContainer: { flex: 1, backgroundColor: "#f8fafc" },
+  gradient: { flex: 1 },
+  layoutContainer: { flex: 1, backgroundColor: "transparent" },
   content: { flex: 1, flexDirection: "row" },
   sidebar: { width: 256, backgroundColor: "#fff" },
   main: { flex: 1 },
@@ -264,6 +176,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 8,
     color: "#1e40af",
+    fontWeight: "500",
   },
   confirmButtons: {
     flexDirection: "row",

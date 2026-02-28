@@ -1,10 +1,11 @@
-import { DashboardHeader } from '@/components/dashboard-header';
+﻿import { DashboardHeader } from '@/components/dashboard-header';
 import { DashboardNav } from '@/components/dashboard-nav';
 import { DebtPredictor } from '@/components/debt-predictor';
 import { PurchaseSimulator } from '@/components/purchase-simulator';
 import { SavingsSuggestions } from '@/components/savings-suggestions';
 import { Progress } from '@/components/ui/progress';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
@@ -25,21 +26,23 @@ interface Goal {
   category: string;
 }
 
+const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+
 // Mock goals data
 const mockGoals: Goal[] = [
   {
     id: "1",
-    title: "Reserva de Emergência",
-    description: "6 meses de despesas para emergências",
+    title: "Reserva de EmergÃªncia",
+    description: "6 meses de despesas para emergÃªncias",
     targetAmount: 7200,
     currentAmount: 2350,
     deadline: "2024-12-31",
-    category: "Emergência",
+    category: "EmergÃªncia",
   },
   {
     id: "2",
-    title: "Viagem de Férias",
-    description: "Viagem para o Nordeste nas férias",
+    title: "Viagem de FÃ©rias",
+    description: "Viagem para o Nordeste nas fÃ©rias",
     targetAmount: 2500,
     currentAmount: 800,
     deadline: "2024-07-01",
@@ -80,15 +83,25 @@ export default function GoalsPage() {
 
     const checkAuthentication = async () => {
         try {
-            const storedUser = await AsyncStorage.getItem('user');
-            const authToken = await AsyncStorage.getItem('authToken');
+            const [authToken, legacyAuthToken, storedUser, legacyStoredUser] = await Promise.all([
+                AsyncStorage.getItem('authToken'),
+                AsyncStorage.getItem('@authToken'),
+                AsyncStorage.getItem('user'),
+                AsyncStorage.getItem('@user'),
+            ]);
+            const token = authToken || legacyAuthToken;
+            const userFromStorage = storedUser || legacyStoredUser;
 
-            if (!storedUser || !authToken) {
+            if (!token) {
                 router.replace('/login');
                 return;
             }
 
-            setUser(JSON.parse(storedUser));
+            if (userFromStorage) {
+                setUser(JSON.parse(userFromStorage));
+            } else {
+                setUser(null);
+            }
         } catch (error) {
             console.error('Erro ao verificar autenticação:', error);
             router.replace('/login');
@@ -96,7 +109,6 @@ export default function GoalsPage() {
             setIsLoading(false);
         }
     }
-
     const formatCurrency = (amount: number) => {
         return amount.toLocaleString('pt-BR', {
             minimumFractionDigits: 2,
@@ -144,7 +156,7 @@ export default function GoalsPage() {
                         </View>
                     </View>
 
-                    {/* Informações restantes */}
+                    {/* InformaÃ§Ãµes restantes */}
                     <View style={styles.remainingInfo}>
                         <Text style={styles.remainingLabel}>Faltam</Text>
                         <Text style={styles.remainingAmount}>R$ {formatCurrency(remaining)}</Text>
@@ -157,162 +169,170 @@ export default function GoalsPage() {
 
     if (isLoading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#000000" />
-                <Text style={styles.loadingText}>Carregando...</Text>
-            </View>
+            <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#000000" />
+                    <Text style={styles.loadingText}>Carregando...</Text>
+                </View>
+            </LinearGradient>
         );
     }
 
     return(
-        <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
-            <DashboardHeader />
-            
-            <View style={styles.content}>
-                {isLargeScreen && (
-                    <View style={styles.sidebar}>
-                        <View style={styles.sidebarContent}>
-                            <DashboardNav />
-                        </View>
-                    </View>
-                )}
+        <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
+            <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
+                <DashboardHeader />
                 
-                <View style={styles.main}>
-                    <ScrollView 
-                        style={styles.scrollView}
-                        contentContainerStyle={styles.scrollContent}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        <View style={styles.pageContent}>
-                            <View style={styles.header}>
-                                <View style={styles.headerText}>
-                                    <Text style={styles.title}>Metas e Assistente Financeiro</Text>
-                                    <Text style={styles.subtitle}>
-                                        {'Gerencie suas metas e use ferramentas inteligentes'}
-                                    </Text>
-                                </View>
-
-                                <TouchableOpacity 
-                                    style={styles.newGoalButton}
-                                    onPress={() => setIsDialogOpen(true)}
-                                >
-                                    <Text style={styles.newGoalButtonText}>Nova Meta</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            <Modal
-                                visible={isDialogOpen}
-                                animationType="slide"
-                                transparent={true}
-                                onRequestClose={() => setIsDialogOpen(false)}
-                            >
-                                <View style={styles.modalOverlay}>
-                                    <View style={styles.modalContent}>
-                                        <View style={styles.modalHeader}>
-                                            <Text style={styles.modalTitle}>Criar Nova Meta</Text>
-                                            <TouchableOpacity 
-                                                onPress={() => setIsDialogOpen(false)}
-                                                style={styles.closeButton}
-                                            >
-                                                <Text style={styles.closeButtonText}>×</Text>
-                                            </TouchableOpacity>
-                                        </View>
-
-                                        <ScrollView style={styles.modalBody}>
-                                            <View style={styles.formGroup}>
-                                                <Text style={styles.label}>Título da Meta</Text>
-                                                <TextInput
-                                                    style={styles.input}
-                                                    placeholder="Ex: Reserva de emergência"
-                                                    value={newGoal.title}
-                                                    onChangeText={(text) => setNewGoal(prev => ({...prev, title: text}))}
-                                                />
-                                            </View>
-
-                                            <View style={styles.formGroup}>
-                                                <Text style={styles.label}>Descrição</Text>
-                                                <TextInput
-                                                    style={[styles.input, styles.textArea]}
-                                                    placeholder="Descreva sua meta..."
-                                                    value={newGoal.description}
-                                                    onChangeText={(text) => setNewGoal(prev => ({...prev, description: text}))}
-                                                    multiline
-                                                    numberOfLines={3}
-                                                    textAlignVertical="top"
-                                                />
-                                            </View>
-
-                                            <View style={styles.formRow}>
-                                                <View style={[styles.formGroup, styles.flex1]}>
-                                                    <Text style={styles.label}>Valor Alvo (R$)</Text>
-                                                    <TextInput
-                                                        style={styles.input}
-                                                        placeholder="0,00"
-                                                        value={newGoal.amount}
-                                                        onChangeText={(text) => setNewGoal(prev => ({...prev, amount: text}))}
-                                                        keyboardType="numeric"
-                                                    />
-                                                </View>
-
-                                                <View style={[styles.formGroup, styles.flex1]}>
-                                                    <Text style={styles.label}>Prazo</Text>
-                                                    <TextInput
-                                                        style={styles.input}
-                                                        placeholder="YYYY-MM-DD"
-                                                        value={newGoal.deadline}
-                                                        onChangeText={(text) => setNewGoal(prev => ({...prev, deadline: text}))}
-                                                    />
-                                                </View>
-                                            </View>
-
-                                            <TouchableOpacity 
-                                                style={styles.createButton}
-                                                onPress={() => {
-                                                    setIsDialogOpen(false);
-                                                }}
-                                            >
-                                                <Text style={styles.createButtonText}>Criar Meta</Text>
-                                            </TouchableOpacity>
-                                        </ScrollView>
-                                    </View>
-                                </View>
-                            </Modal>
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Suas Metas</Text>
-                                <View style={styles.goalsGrid}>
-                                    {goals.map(renderGoalCard)}
-                                </View>
-                            </View>
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Ferramentas Inteligentes</Text>
-                                
-                                <View style={styles.toolsGrid}>
-                                    <View style={styles.toolItem}>
-                                        <PurchaseSimulator />
-                                    </View>
-                                    <View style={styles.toolItem}>
-                                        <DebtPredictor />
-                                    </View>
-                                </View>
-
-                                <View style={styles.savingsSection}>
-                                    <SavingsSuggestions />
-                                </View>
+                <View style={styles.content}>
+                    {isLargeScreen && (
+                        <View style={styles.sidebar}>
+                            <View style={styles.sidebarContent}>
+                                <DashboardNav />
                             </View>
                         </View>
-                    </ScrollView>
+                    )}
+                    
+                    <View style={styles.main}>
+                        <ScrollView 
+                            style={styles.scrollView}
+                            contentContainerStyle={styles.scrollContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <View style={styles.pageContent}>
+                                <View style={styles.header}>
+                                    <View style={styles.headerText}>
+                                        <Text style={styles.title}>Metas e Assistente Financeiro</Text>
+                                        <Text style={styles.subtitle}>
+                                            {'Gerencie suas metas e use ferramentas inteligentes'}
+                                        </Text>
+                                        <Text style={styles.mockNotice}>Dados mockados, aguardando backend.</Text>
+                                    </View>
+
+                                    <TouchableOpacity 
+                                        style={styles.newGoalButton}
+                                        onPress={() => setIsDialogOpen(true)}
+                                    >
+                                        <Text style={styles.newGoalButtonText}>Nova Meta</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <Modal
+                                    visible={isDialogOpen}
+                                    animationType="slide"
+                                    transparent={true}
+                                    onRequestClose={() => setIsDialogOpen(false)}
+                                >
+                                    <View style={styles.modalOverlay}>
+                                        <View style={styles.modalContent}>
+                                            <View style={styles.modalHeader}>
+                                                <Text style={styles.modalTitle}>Criar Nova Meta</Text>
+                                                <TouchableOpacity 
+                                                    onPress={() => setIsDialogOpen(false)}
+                                                    style={styles.closeButton}
+                                                >
+                                                    <Text style={styles.closeButtonText}>Ã—</Text>
+                                                </TouchableOpacity>
+                                            </View>
+
+                                            <ScrollView style={styles.modalBody}>
+                                                <View style={styles.formGroup}>
+                                                    <Text style={styles.label}>TÃ­tulo da Meta</Text>
+                                                    <TextInput
+                                                        style={styles.input}
+                                                        placeholder="Ex: Reserva de emergÃªncia"
+                                                        value={newGoal.title}
+                                                        onChangeText={(text) => setNewGoal(prev => ({...prev, title: text}))}
+                                                    />
+                                                </View>
+
+                                                <View style={styles.formGroup}>
+                                                    <Text style={styles.label}>DescriÃ§Ã£o</Text>
+                                                    <TextInput
+                                                        style={[styles.input, styles.textArea]}
+                                                        placeholder="Descreva sua meta..."
+                                                        value={newGoal.description}
+                                                        onChangeText={(text) => setNewGoal(prev => ({...prev, description: text}))}
+                                                        multiline
+                                                        numberOfLines={3}
+                                                        textAlignVertical="top"
+                                                    />
+                                                </View>
+
+                                                <View style={styles.formRow}>
+                                                    <View style={[styles.formGroup, styles.flex1]}>
+                                                        <Text style={styles.label}>Valor Alvo (R$)</Text>
+                                                        <TextInput
+                                                            style={styles.input}
+                                                            placeholder="0,00"
+                                                            value={newGoal.amount}
+                                                            onChangeText={(text) => setNewGoal(prev => ({...prev, amount: text}))}
+                                                            keyboardType="numeric"
+                                                        />
+                                                    </View>
+
+                                                    <View style={[styles.formGroup, styles.flex1]}>
+                                                        <Text style={styles.label}>Prazo</Text>
+                                                        <TextInput
+                                                            style={styles.input}
+                                                            placeholder="YYYY-MM-DD"
+                                                            value={newGoal.deadline}
+                                                            onChangeText={(text) => setNewGoal(prev => ({...prev, deadline: text}))}
+                                                        />
+                                                    </View>
+                                                </View>
+
+                                                <TouchableOpacity 
+                                                    style={styles.createButton}
+                                                    onPress={() => {
+                                                        setIsDialogOpen(false);
+                                                    }}
+                                                >
+                                                    <Text style={styles.createButtonText}>Criar Meta</Text>
+                                                </TouchableOpacity>
+                                            </ScrollView>
+                                        </View>
+                                    </View>
+                                </Modal>
+
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}>Suas Metas</Text>
+                                    <View style={styles.goalsGrid}>
+                                        {goals.map(renderGoalCard)}
+                                    </View>
+                                </View>
+
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}>Ferramentas Inteligentes</Text>
+                                    
+                                    <View style={styles.toolsGrid}>
+                                        <View style={styles.toolItem}>
+                                            <PurchaseSimulator />
+                                        </View>
+                                        <View style={styles.toolItem}>
+                                            <DebtPredictor />
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.savingsSection}>
+                                        <SavingsSuggestions />
+                                    </View>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
                 </View>
             </View>
-        </View>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
+    gradient: {
+        flex: 1,
+    },
     layoutContainer: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: 'transparent',
     },
     content: {
         flex: 1,
@@ -356,7 +376,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: 'transparent',
         gap: 16,
     },
     loadingText: {
@@ -383,6 +403,12 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 16,
         color: '#6b7280',
+    },
+    mockNotice: {
+        marginTop: 8,
+        fontSize: 13,
+        color: '#92400e',
+        fontWeight: '500',
     },
     newGoalButton: {
         backgroundColor: '#000000',
@@ -591,3 +617,5 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
+
+

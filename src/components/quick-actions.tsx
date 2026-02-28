@@ -1,100 +1,172 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Link } from 'expo-router';
-import React from 'react';
-import { Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "expo-router";
+import { BarChart3, MessageCircle, Minus, Plus } from "lucide-react-native";
+import React from "react";
+import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+
+type ActionItem = {
+  href: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+};
 
 export function QuickActions() {
-    const { width } = useWindowDimensions();
-    const isLargeScreen = width >= 768;
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768;
 
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Ações Rápidas</CardTitle>
-                <CardDescription>Acesse rapidamente as funcionalidades principais</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <View style={isLargeScreen ? styles.gridLarge : styles.gridSmall}>
-                    <Link href="/(tabs)/transactions" asChild>
-                        <TouchableOpacity style={isLargeScreen ? styles.buttonLarge : styles.buttonSmall}>
-                            <Text style={styles.buttonTitle}>Adicionar Receita</Text>
-                            <Text style={styles.buttonDescription}>
-                                Registre uma nova entrada de dinheiro
-                            </Text>
-                        </TouchableOpacity>
-                    </Link>
+  const actions: ActionItem[] = [
+    {
+      href: "/transactions?type=receita",
+      title: "Adicionar Receita",
+      description: "Registre uma nova entrada de dinheiro",
+      icon: (
+        <View style={[styles.iconBadge, styles.iconIncome]}>
+          <Plus size={24} color="#ffffff" strokeWidth={2.4} />
+        </View>
+      ),
+    },
+    {
+      href: "/(tabs)/transactions",
+      title: "Adicionar Despesa",
+      description: "Registre um novo gasto",
+      icon: (
+        <View style={[styles.iconBadge, styles.iconExpense]}>
+          <Minus size={24} color="#ffffff" strokeWidth={2.4} />
+        </View>
+      ),
+    },
+    {
+      href: "/(tabs)/chat",
+      title: "Conversar com IA",
+      description: "Tire duvidas sobre suas financas",
+      icon: (
+        <View style={[styles.iconBadge, styles.iconInfo]}>
+          <MessageCircle size={22} color="#ffffff" strokeWidth={2.2} />
+        </View>
+      ),
+    },
+    {
+      href: "/(tabs)/reports",
+      title: "Ver Relatorios",
+      description: "Analise seus gastos e receitas",
+      icon: (
+        <View style={[styles.iconBadge, styles.iconInfo]}>
+          <BarChart3 size={22} color="#ffffff" strokeWidth={2.2} />
+        </View>
+      ),
+    },
+  ];
 
-                    <Link href="/(tabs)/transactions" asChild>
-                        <TouchableOpacity style={isLargeScreen ? styles.buttonLarge : styles.buttonSmall}>
-                            <Text style={styles.buttonTitle}>Adicionar Despesa</Text>
-                            <Text style={styles.buttonDescription}>
-                                Registre um novo gasto
-                            </Text>
-                        </TouchableOpacity>
-                    </Link>
-
-                    <Link href="/(tabs)/chat" asChild>
-                        <TouchableOpacity style={isLargeScreen ? styles.buttonLarge : styles.buttonSmall}>
-                            <Text style={styles.buttonTitle}>Conversar com IA</Text>
-                            <Text style={styles.buttonDescription}>
-                                Tire dúvidas sobre suas finanças
-                            </Text>
-                        </TouchableOpacity>
-                    </Link>
-
-                    <Link href="/(tabs)/reports" asChild>
-                        <TouchableOpacity style={isLargeScreen ? styles.buttonLarge : styles.buttonSmall}>
-                            <Text style={styles.buttonTitle}>Ver Relatórios</Text>
-                            <Text style={styles.buttonDescription}>
-                                Analise seus gastos e receitas
-                            </Text>
-                        </TouchableOpacity>
-                    </Link>
+  return (
+    <Card style={styles.card}>
+      <CardHeader>
+        <CardTitle style={styles.title}>Acoes Rapidas</CardTitle>
+        <CardDescription style={styles.description}>
+          Acesse rapidamente as funcionalidades principais
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <View style={isLargeScreen ? styles.gridLarge : styles.gridSmall}>
+          {actions.map((action) => (
+            <Link key={action.title} href={action.href as any} asChild>
+              <TouchableOpacity style={isLargeScreen ? styles.buttonLarge : styles.buttonSmall}>
+                <View style={styles.buttonInner}>
+                  {action.icon}
+                  <View style={styles.textBox}>
+                    <Text style={styles.buttonTitle}>{action.title}</Text>
+                    <Text style={styles.buttonDescription}>{action.description}</Text>
+                  </View>
                 </View>
-            </CardContent>
-        </Card>
-    );
+              </TouchableOpacity>
+            </Link>
+          ))}
+        </View>
+      </CardContent>
+    </Card>
+  );
 }
 
-const styles = {
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#dfe3e8",
+    backgroundColor: "#ffffff",
+    maxWidth: "100%",
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#141820",
+  },
+  description: {
+    fontSize: 14,
+    color: "#686f7d",
+    marginTop: 6,
+  },
   gridLarge: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
   },
   gridSmall: {
-    flexDirection: 'column' as const,
+    flexDirection: "column",
     gap: 12,
   },
   buttonLarge: {
-    width: '48%',
-    minHeight: 120,
-    backgroundColor: '#f8fafc',
+    width: "48.8%",
+    minHeight: 132,
+    backgroundColor: "#f7f8fa",
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 20,
-    justifyContent: 'center' as const,
+    borderColor: "#dde2e8",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   buttonSmall: {
-    width: '100%',
-    minHeight: 100,
-    backgroundColor: '#f8fafc',
+    width: "100%",
+    minHeight: 110,
+    backgroundColor: "#f7f8fa",
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    justifyContent: 'center' as const,
+    borderColor: "#dde2e8",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  buttonInner: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  textBox: {
+    flex: 1,
+    gap: 6,
+  },
+  iconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconIncome: {
+    backgroundColor: "#2db39a",
+  },
+  iconExpense: {
+    backgroundColor: "#ee635d",
+  },
+  iconInfo: {
+    backgroundColor: "#43b8d5",
   },
   buttonTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#111827',
-    marginBottom: 8,
+    fontWeight: "600",
+    color: "#101620",
   },
   buttonDescription: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: "#585f6d",
     lineHeight: 18,
   },
-} as const;
+});

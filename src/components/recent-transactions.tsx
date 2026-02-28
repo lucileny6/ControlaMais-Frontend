@@ -9,36 +9,24 @@ interface RecentTransactionsProps {
 
 export function RecentTransactions({ transactions }: RecentTransactionsProps) {
   return (
-    <Card>
-      {/* 🔹 TÍTULO FIXO (como Ações Rápidas) */}
+    <Card style={styles.card}>
       <CardHeader>
-        <CardTitle>Transações Recentes</CardTitle>
+        <CardTitle style={styles.title}>Transacoes Recentes</CardTitle>
       </CardHeader>
 
       <CardContent>
-        {/* 🔹 ESTADO VAZIO */}
         {!transactions || transactions.length === 0 ? (
-          <Text style={styles.empty}>Nenhuma transação recente</Text>
+          <Text style={styles.empty}>Nenhuma transacao recente</Text>
         ) : (
           <View style={styles.list}>
             {transactions.map((transaction) => (
               <View key={transaction.id} style={styles.row}>
-                <View>
-                  <Text style={styles.description}>
-                    {transaction.description}
-                  </Text>
-                  <Text style={styles.category}>
-                    {transaction.category}
-                  </Text>
+                <View style={styles.leftBlock}>
+                  <Text style={styles.description}>{transaction.description}</Text>
+                  <Text style={styles.category}>{transaction.category}</Text>
                 </View>
 
-                <Text
-                  style={
-                    transaction.type === "income"
-                      ? styles.income
-                      : styles.expense
-                  }
-                >
+                <Text style={transaction.type === "income" ? styles.income : styles.expense}>
                   {Number(transaction.amount || 0).toLocaleString("pt-BR", {
                     style: "currency",
                     currency: "BRL",
@@ -54,34 +42,56 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
 }
 
 const styles = StyleSheet.create({
+  card: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#dfe3e8",
+    backgroundColor: "#ffffff",
+    maxWidth: "100%",
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#141820",
+  },
   list: {
-    gap: 16,
+    gap: 0,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#eceff3",
+  },
+  leftBlock: {
+    gap: 4,
+    paddingRight: 14,
   },
   description: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#101722",
   },
   category: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#676f7d",
   },
   income: {
-    color: "#10b981",
-    fontWeight: "bold",
+    color: "#198C68",
+    fontWeight: "700",
+    fontSize: 16,
   },
   expense: {
-    color: "#ef4444",
-    fontWeight: "bold",
+    color: "#D73B43",
+    fontWeight: "700",
+    fontSize: 16,
   },
   empty: {
     textAlign: "center",
     color: "#9ca3af",
     paddingVertical: 16,
+    fontSize: 14,
   },
 });

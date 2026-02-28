@@ -1,13 +1,11 @@
-// app/(tabs)/dashboard.tsx
-import { useDashboard } from "@/hooks/useDashboard";
-
 import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { FinancialOverview } from "@/components/financial-overview";
 import { QuickActions } from "@/components/quick-actions";
 import { RecentTransactions } from "@/components/recent-transactions";
-
+import { useDashboard } from "@/hooks/useDashboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,20 +20,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface User {
   name?: string;
+  nome?: string;
+  userName?: string;
+  username?: string;
+  fullName?: string;
   email?: string;
 }
 
+const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+
 export default function PageDashboard() {
   const router = useRouter();
-
-  // ✅ DADOS REAIS DO DASHBOARD
-  const {
-    saldo,
-    totalReceitas,
-    totalDespesas,
-    transacoesRecentes,
-    loading,
-  } = useDashboard();
+  const { saldo, totalReceitas, totalDespesas, transacoesRecentes, loading } = useDashboard();
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +39,31 @@ export default function PageDashboard() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isDesktopWide = width >= 1180;
+
+  const getDisplayName = (currentUser: User | null) => {
+    if (!currentUser) return "";
+
+    const rawName =
+      currentUser.name ??
+      currentUser.nome ??
+      currentUser.fullName ??
+      currentUser.userName ??
+      currentUser.username ??
+      "";
+
+    if (rawName && rawName.trim().length > 0) {
+      return rawName.trim();
+    }
+
+    if (currentUser.email && currentUser.email.includes("@")) {
+      return currentUser.email.split("@")[0];
+    }
+
+    return "";
+  };
+
+  const displayName = getDisplayName(user);
 
   useEffect(() => {
     checkAuthentication();
@@ -50,101 +71,113 @@ export default function PageDashboard() {
 
   const checkAuthentication = async () => {
     try {
-      const storedUser = await AsyncStorage.getItem("user");
-      const authToken = await AsyncStorage.getItem("authToken");
+      const [storedUser, legacyStoredUser, authToken, legacyAuthToken] = await Promise.all([
+        AsyncStorage.getItem("user"),
+        AsyncStorage.getItem("@user"),
+        AsyncStorage.getItem("authToken"),
+        AsyncStorage.getItem("@authToken"),
+      ]);
+      const token = authToken || legacyAuthToken;
+      const userFromStorage = storedUser || legacyStoredUser;
 
-      if (!storedUser || !authToken) {
+      if (!token) {
         router.replace("/login");
         return;
       }
 
-      setUser(JSON.parse(storedUser));
+      if (userFromStorage) {
+        setUser(JSON.parse(userFromStorage));
+      } else {
+        setUser(null);
+      }
     } catch (error) {
-      console.error("Erro ao verificar autenticação:", error);
+      console.error("Erro ao verificar autenticacao:", error);
       router.replace("/login");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ LOADING UNIFICADO (auth + dashboard)
   if (isLoading || loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000000" />
-        <Text style={styles.loadingText}>Carregando...</Text>
-      </View>
+      <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#000000" />
+          <Text style={styles.loadingText}>Carregando...</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
-      <DashboardHeader />
+    <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
+      <View style={[styles.layoutContainer, { paddingTop: insets.top }]}>
+        <DashboardHeader />
 
-      <View style={styles.content}>
-        {isLargeScreen && (
-          <View style={styles.sidebar}>
-            <View style={styles.sidebarContent}>
-              <DashboardNav />
+        <View style={styles.content}>
+          {isLargeScreen && (
+            <View style={styles.sidebar}>
+              <View style={styles.sidebarContent}>
+                <DashboardNav />
+              </View>
             </View>
+          )}
+
+          <View style={styles.main}>
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.dashboardContent}>
+                <View style={styles.welcomeSection}>
+                  <Text style={styles.title}>Painel</Text>
+                  <Text style={styles.subtitle}>
+                    {displayName ? `Bem-vindo, ${displayName}` : "Bem-vindo"}
+                  </Text>
+                </View>
+
+                <FinancialOverview
+                  saldo={saldo}
+                  totalReceitas={totalReceitas}
+                  totalDespesas={totalDespesas}
+                  loading={loading}
+                />
+
+                <View style={[styles.grid, isDesktopWide && styles.bottomGridDesktop]}>
+                  <View style={[styles.column, isDesktopWide && styles.transactionsWide]}>
+                    <RecentTransactions transactions={transacoesRecentes} />
+                  </View>
+                  <View style={[styles.column, isDesktopWide && styles.quickActionsNarrow]}>
+                    <QuickActions />
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
           </View>
-        )}
-
-        <View style={styles.main}>
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.dashboardContent}>
-              <View style={styles.welcomeSection}>
-                <Text style={styles.title}>Dashboard</Text>
-                <Text style={styles.subtitle}>
-                  {user
-                    ? `Bem-vindo, ${user.name}`
-                    : "Visão geral das suas finanças pessoais"}
-                </Text>
-              </View>
-
-              {/* ✅ AGORA COM DADOS REAIS */}
-              <FinancialOverview
-                saldo={saldo}
-                totalReceitas={totalReceitas}
-                totalDespesas={totalDespesas}
-                loading={loading}
-              />
-
-              <View style={styles.grid}>
-                <View style={styles.column}>
-                  {/* 🔹 Ainda mockado — vamos ajustar depois */}
-                  <RecentTransactions transactions={transacoesRecentes} />
-                </View>
-                <View style={styles.column}>
-                  <QuickActions />
-                </View>
-              </View>
-            </View>
-          </ScrollView>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   layoutContainer: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "transparent",
   },
   content: {
     flex: 1,
     flexDirection: "row",
   },
   sidebar: {
-    width: 256,
+    width: 246,
     borderRightWidth: 1,
-    borderRightColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderRightColor: "#d9dde5",
+    backgroundColor: "#f8f8fa",
   },
   sidebarContent: {
     paddingVertical: 24,
@@ -157,39 +190,56 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    width: "100%",
+    maxWidth: 1330,
+    alignSelf: "center",
   },
   dashboardContent: {
     flex: 1,
+    gap: 18,
   },
   welcomeSection: {
-    marginBottom: 32,
+    marginBottom: 2,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#111827",
+    fontSize: 38,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   subtitle: {
     fontSize: 16,
-    color: "#4b5563",
+    fontWeight: "500",
+    color: "#ffffff",
     marginTop: 4,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 24,
-    marginTop: 24,
+    gap: 18,
+    marginTop: 2,
+  },
+  bottomGridDesktop: {
+    flexWrap: "nowrap",
   },
   column: {
     flex: 1,
-    minWidth: 300,
+    minWidth: 340,
+  },
+  transactionsWide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  quickActionsNarrow: {
+    flex: 1.2,
+    minWidth: 0,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "transparent",
     gap: 16,
   },
   loadingText: {

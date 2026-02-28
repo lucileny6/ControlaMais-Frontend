@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -13,7 +14,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BrandColors } from "../constants/theme";
 import { apiService } from "../src/services/api";
+
+type LoginResponse = {
+  token: string;
+  message: string;
+  user?: unknown;
+  data?: {
+    token?: string;
+    message?: string;
+    user?: unknown;
+  };
+};
+
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -30,169 +44,197 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await AsyncStorage.removeItem("authToken");
+      await AsyncStorage.multiRemove(["authToken", "user", "@authToken", "@user"]);
 
-      const loginResponse = await apiService.login(email, password);
+      const loginResponse = (await apiService.login(email, password)) as LoginResponse;
+      const responseData = loginResponse.data ?? loginResponse;
+      const token = responseData.token;
+      const message = responseData.message ?? loginResponse.message ?? "Login realizado com sucesso";
+      const user = responseData.user ?? loginResponse.user;
 
-      await AsyncStorage.setItem("authToken", loginResponse.token);
+      if (!token) {
+        throw new Error("Token de autenticacao nao retornado pelo backend");
+      }
 
-      Alert.alert("Sucesso!", loginResponse.message);
+      await AsyncStorage.multiSet([
+        ["authToken", token],
+        ["@authToken", token],
+      ]);
+      if (user) {
+        const serializedUser = JSON.stringify(user);
+        await AsyncStorage.multiSet([
+          ["user", serializedUser],
+          ["@user", serializedUser],
+        ]);
+      }
+
+      Alert.alert("Sucesso!", message);
       router.replace("/(tabs)/dashboard");
     } catch (error) {
-      Alert.alert("Erro", error as string);
+      const message = error instanceof Error ? error.message : String(error);
+      Alert.alert("Erro", message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <Card style={{ width: 400 }}>
-            <CardHeader>
-              <CardTitle style={styles.title}>Login</CardTitle>
-              <Text style={styles.subtitle}>Seja bem-vindo(a)</Text>
-            </CardHeader>
+    <LinearGradient
+      colors={["#020305", "#03100E", "#052A24", "#11B99C", "#29E9CF"]}
+      locations={[0, 0.3, 0.57, 0.82, 1]}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <Card style={styles.card}>
+              <CardHeader>
+                <CardTitle style={styles.title}>Login</CardTitle>
+                <Text style={styles.subtitle}>Seu controle Financeiro começa aqui.</Text>
+              </CardHeader>
 
-            <CardContent>
-              <View>
-                <Label>Email</Label>
-                <Input
-                  style={styles.input}
-                  placeholder="Digite seu email"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                />
-              </View>
+              <CardContent>
+                <View>
+                  <Label>Email</Label>
+                  <Input
+                    style={styles.input}
+                    placeholder="Digite seu email"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                  />
+                </View>
 
-              <View>
-                <Label>Senha</Label>
-                <Input
-                  style={styles.input}
-                  placeholder="Digite sua senha"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoComplete="password"
-                />
-              </View>
+                <View>
+                  <Label>Senha</Label>
+                  <Input
+                    style={styles.input}
+                    placeholder="Digite sua senha"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    autoComplete="password"
+                  />
+                </View>
 
-              <TouchableOpacity
-                style={[styles.button, isLoading && styles.buttonDisabled]}
-                onPress={handleLogin}
-                disabled={isLoading}
-              >
-                <Text style={styles.buttonText}>
-                  {isLoading ? "Entrando..." : "Entrar"}
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.loginContainer}>
-                <Link href="/register" asChild>
-                  <TouchableOpacity disabled={isLoading}>
-                    <Text
-                      style={[
-                        styles.loginLink,
-                        isLoading && styles.linkDisabled,
-                      ]}
-                    >
-                      Novo por aqui? Crie sua conta agora.
-                    </Text>
-                  </TouchableOpacity>
-                </Link>
-              </View>
-            </CardContent>
-          </Card>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+                <TouchableOpacity
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.buttonText}>
+                    {isLoading ? "Entrando..." : "Acesse a sua conta"}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.loginContainer}>
+                  <Link href="/register" asChild>
+                    <TouchableOpacity disabled={isLoading}>
+                      <Text
+                        style={[
+                          styles.loginLink,
+                          isLoading && styles.linkDisabled,
+                        ]}
+                      >
+                        Novo por aqui? Crie sua conta agora.
+                      </Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+              </CardContent>
+            </Card>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "transparent",
   },
-
   container: {
     flex: 1,
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "transparent",
   },
-
   content: {
     padding: 24,
     maxWidth: 400,
     width: "100%",
     alignSelf: "center",
   },
-
+  card: {
+    width: 400,
+    maxWidth: "100%",
+    backgroundColor: "#FFFFFF",
+    borderColor: "rgba(56, 255, 226, 0.35)",
+    borderWidth: 1,
+  },
   title: {
     fontSize: 32,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 8,
-    color: "#111827",
+    color: "#000000",
   },
-
   subtitle: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 32,
-    color: "#666",
+    color: "#021416",
   },
-
   input: {
-    backgroundColor: "white",
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
     padding: 16,
     borderRadius: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#666",
+    borderColor: "rgba(56, 255, 226, 0.3)",
+    color: "#F8FAFC",
     fontSize: 16,
   },
-
   button: {
-    backgroundColor: "#000",
+    backgroundColor: BrandColors.primaryButton,
     padding: 16,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 8,
   },
-
   buttonDisabled: {
-    backgroundColor: "#666",
+    backgroundColor: "#4B5563",
   },
-
   buttonText: {
-    color: "white",
+    color: "#ECFEFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-
   loginContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 16,
   },
-
   loginLink: {
-    color: "#3b82f6",
+    color: "#000506",
     fontSize: 14,
     fontWeight: "600",
   },
-
   linkDisabled: {
-    color: "#9ca3af",
+    color: "#010712",
     opacity: 0.6,
   },
 });

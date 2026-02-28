@@ -39,14 +39,22 @@ export function useDashboard() {
 
         // 🔹 NORMALIZAÇÃO DEFINITIVA
         transacoesRecentes: (response.transacoesRecentes ?? []).map(
-          (t: any): DashboardTransaction => ({
-            id: String(t.id ?? ""),
-            description: t.description ?? t.descricao ?? "",
-            category: t.category ?? t.categoria ?? "",
-            type: (t.type ?? t.tipo ?? "expense") as "income" | "expense",
-            amount: Number(t.amount ?? t.valor ?? t.value ?? 0),
-            date: t.date ?? t.data ?? "",
-          })
+          (t: any, index: number): DashboardTransaction => {
+            const rawType = String(t?.type ?? t?.tipo ?? "expense").toLowerCase().trim();
+            const normalizedType = rawType === "income" || rawType === "icome" || rawType === "receita"
+              ? "income"
+              : "expense";
+            const baseId = String(t?.id ?? t?._id ?? t?.transactionId ?? index);
+
+            return {
+              id: `${normalizedType}-${baseId}-${index}`,
+              description: t.description ?? t.descricao ?? "",
+              category: t.category ?? t.categoria ?? "",
+              type: normalizedType,
+              amount: Number(t.amount ?? t.valor ?? t.value ?? 0),
+              date: t.date ?? t.data ?? "",
+            };
+          }
         ),
       });
     } catch (error: any) {

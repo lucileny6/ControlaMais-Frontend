@@ -1,25 +1,57 @@
+/* =====================================================
+   TIPOS GLOBAIS DO PROJETO
+===================================================== */
+
+/* =========================
+   USER / AUTH
+========================= */
+
 export interface User {
   id: string;
   name: string;
   email: string;
   createdAt: string;
-  updateAt: string;
+  updatedAt: string;
 }
+
+export interface LoginResponse {
+  success: boolean;
+  token: string;
+  message?: string;
+  user?: User;
+}
+
+/* =========================
+   API RESPONSE (GENÉRICO)
+========================= */
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  error?: string;
+}
+
+/* =========================
+   TRANSAÇÕES FINANCEIRAS
+========================= */
+
+export type TransactionType = "income" | "expense";
 
 export interface Transaction {
   id: string;
   userId: string;
-  type: "income" | "expense";
+  type: TransactionType;
   amount: number;
   category: string;
   description: string;
   date: string;
   createdAt: string;
-  updateAt: string;
+  updatedAt: string;
 }
 
 export interface CreateTransactionDTO {
-  type: "income" | "expense";
+  type: TransactionType;
   amount: number;
   category: string;
   description: string;
@@ -27,31 +59,17 @@ export interface CreateTransactionDTO {
   notes?: string;
 }
 
-export interface LoginResponse {
-  token: string;
-  message: string;
-  sucess: boolean;
-}
+/* =========================
+   DASHBOARD
+========================= */
 
-export interface Goal {
+export interface DashboardTransaction {
   id: string;
-  userId: string;
-  title: string;
-  targetAmount: number;
-  currentAmount: number;
-  deadline: string;
+  type: TransactionType;
+  amount: number;
   category: string;
-  status: "active" | "completed" | "paused";
-  createdAt: string;
-  updateAt: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  userId: string;
-  message: string;
-  response: string;
-  timestamp: string;
+  description: string;
+  date: string;
 }
 
 export interface FinancialSummary {
@@ -63,67 +81,40 @@ export interface FinancialSummary {
   savingsRate: number;
 }
 
-export interface ApiResponse<T> {
-  success: boolean;
-  date: T;
-  message?: string;
-  error?: string;
-  user?: User;
-  token: string;
+/* =========================
+   METAS / GOALS
+========================= */
+
+export type GoalStatus = "active" | "completed" | "paused";
+
+export interface Goal {
+  id: string;
+  userId: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline: string;
+  category: string;
+  status: GoalStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface PaginatedResponse<T> {
-  success: boolean;
-  date: T[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
+/* =========================
+   CHAT IA
+========================= */
 
-export interface ResponsiveStyles {
-  cardPadding: number;
-  cardMargin: number;
-  gridGap: number;
-  columnMinWidth: number;
-  cardMinHeight: number;
-}
-// ===================================
-// CHAT IA
-// ===================================
-
+/**
+ * Estados possíveis do chat no FRONT
+ * (o backend controla a lógica)
+ */
 export type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
 
-export interface AcaoFinanceira {
-  tipo: "RECEITA" | "DESPESA";
-  valor: number;
-  categoria: string;
-  descricao: string;
-  data: string;
-}
-
+/**
+ * Resposta da IA vinda do BACKEND
+ * ⚠️ NÃO existe objeto de ação aqui
+ */
 export interface AIResponse {
   tipo: "TEXTO" | "CONFIRMACAO";
   mensagem: string;
-  acao?: AcaoFinanceira;
 }
-export interface DashboardTransaction {
-  id: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-}
-export interface DashboardTransaction {
-  id: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-}
-
-

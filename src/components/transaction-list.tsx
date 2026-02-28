@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   FlatList,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,16 +30,97 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const normalizeCategory = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+
+  const parseDateValue = (value: string) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+
+    const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const brPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+    let parsed: Date;
+    if (isoPattern.test(raw)) {
+      const [, year, month, day] = raw.match(isoPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (brPattern.test(raw)) {
+      const [, day, month, year] = raw.match(brPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else {
+      parsed = new Date(raw);
+    }
+
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  };
 
   const filteredTransactions = transactions.filter((transaction) => {
-    const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === "all" || transaction.type === filterType;
-    const matchesCategory = filterCategory === "all" || transaction.category === filterCategory;
+    const description = String(transaction?.description ?? "");
+    const type = transaction?.type ?? "expense";
+    const category = String(transaction?.category ?? "");
+    const matchesSearch = description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === "all" || type === filterType;
+    const matchesCategory =
+      filterCategory === "all" ||
+      normalizeCategory(category) === normalizeCategory(filterCategory);
+    const transactionDate = parseDateValue(String(transaction?.date ?? ""));
+    const start = parseDateValue(startDate);
+    const end = parseDateValue(endDate);
+    if (start) start.setHours(0, 0, 0, 0);
+    if (end) end.setHours(23, 59, 59, 999);
 
-    return matchesSearch && matchesType && matchesCategory;
+    const hasOnlyStart = Boolean(start) && !end;
+    const hasOnlyEnd = !start && Boolean(end);
+
+    const matchesDate = (() => {
+      if (!start && !end) return true;
+      if (!transactionDate) return false;
+      const current = new Date(transactionDate);
+      current.setHours(12, 0, 0, 0);
+
+      if (hasOnlyStart) {
+        const target = new Date(start!);
+        target.setHours(12, 0, 0, 0);
+        return current.getTime() === target.getTime();
+      }
+
+      if (hasOnlyEnd) {
+        const target = new Date(end!);
+        target.setHours(12, 0, 0, 0);
+        return current.getTime() === target.getTime();
+      }
+
+      const matchesStartDate = !start || current >= start;
+      const matchesEndDate = !end || current <= end;
+      return matchesStartDate && matchesEndDate;
+    })();
+
+    return matchesSearch && matchesType && matchesCategory && matchesDate;
   });
 
-  const categories = Array.from(new Set(transactions.map((t) => t.category)));
+  const totalTransactions = filteredTransactions.length;
+  const totalIncome = filteredTransactions
+    .filter((transaction) => transaction.type === "income")
+    .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
+  const totalExpense = filteredTransactions
+    .filter((transaction) => transaction.type === "expense")
+    .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
+  const balance = totalIncome - totalExpense;
+
+  const categories = Array.from(
+    new Set(
+      transactions
+        .map((t) => String(t?.category ?? "").trim())
+        .filter((category) => category.length > 0)
+    )
+  );
 
   const formatCurrency = (amount: number) => {
     return Math.abs(amount).toLocaleString("pt-BR", {
@@ -91,31 +173,34 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
             </Text>
           </View>
 
-          <TouchableOpacity 
+          <Pressable 
             style={styles.menuButton}
             onPress={() => {
               onEdit(item);
             }}
+            hitSlop={8}
           >
             <Text style={styles.menuButtonText}>⋮</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
 
-      {/* Botões de ação */}
+      {/* Botoes de acao */}
       <View style={styles.actionButtons}>
-        <TouchableOpacity 
+        <Pressable 
           style={[styles.actionButton, styles.editButton]}
           onPress={() => onEdit(item)}
+          hitSlop={8}
         >
           <Text style={styles.actionButtonText}>Editar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
+        </Pressable>
+        <Pressable 
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete(item.id)}
+          hitSlop={8}
         >
           <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Excluir</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );
@@ -126,10 +211,25 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
       <View style={styles.filtersContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar transações..."
+          placeholder="Buscar transacoes..."
           value={searchTerm}
           onChangeText={setSearchTerm}
         />
+
+        <View style={styles.dateFilterRow}>
+          <TextInput
+            style={styles.dateInput}
+            placeholder="Data inicial (AAAA-MM-DD)"
+            value={startDate}
+            onChangeText={setStartDate}
+          />
+          <TextInput
+            style={styles.dateInput}
+            placeholder="Data final (AAAA-MM-DD)"
+            value={endDate}
+            onChangeText={setEndDate}
+          />
+        </View>
 
         <View style={styles.filterRow}>
           <TouchableOpacity 
@@ -191,9 +291,9 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
             ]}>Todas</Text>
           </TouchableOpacity>
           
-          {categories.map((category) => (
+          {categories.map((category, index) => (
             <TouchableOpacity 
-              key={category}
+              key={`${category}-${index}`}
               style={[
                 styles.categoryChip,
                 filterCategory === category && styles.categoryChipActive
@@ -209,20 +309,45 @@ export function TransactionList({ transactions, onEdit, onDelete }: TransactionL
         </ScrollView>
       </View>
 
-      {/* Lista de transações */}
+      <View style={styles.summaryContainer}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Total de transacoes</Text>
+          <Text style={styles.summaryValue}>{totalTransactions}</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Receitas</Text>
+          <Text style={[styles.summaryValue, styles.incomeText]}>
+            R$ {formatCurrency(totalIncome)}
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Despesas</Text>
+          <Text style={[styles.summaryValue, styles.expenseText]}>
+            R$ {formatCurrency(totalExpense)}
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Saldo</Text>
+          <Text style={[styles.summaryValue, balance >= 0 ? styles.incomeText : styles.expenseText]}>
+            R$ {formatCurrency(balance)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Lista de transacoes */}
       {filteredTransactions.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
             {searchTerm || filterType !== "all" || filterCategory !== "all"
-              ? "Nenhuma transação encontrada com os filtros aplicados."
-              : "Nenhuma transação registrada ainda."}
+              ? "Nenhuma transacao encontrada com os filtros aplicados."
+              : "Nenhuma transacao registrada ainda."}
           </Text>
         </View>
       ) : (
         <FlatList
           data={filteredTransactions}
           renderItem={renderTransactionItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item?.id || item?.date || "tx"}-${index}`}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
         />
@@ -236,33 +361,50 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filtersContainer: {
-    gap: 16,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 10,
   },
   searchInput: {
     backgroundColor: '#ffffff',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e5e5e5',
-    fontSize: 16,
+    fontSize: 14,
   },
   filterRow: {
     flexDirection: 'row',
     gap: 8,
+    flexWrap: 'wrap',
+  },
+  dateFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dateInput: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    fontSize: 13,
   },
   filterButton: {
-    flex: 1,
-    padding: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: '#f5f5f5',
     alignItems: 'center',
+    minWidth: 95,
   },
   filterButtonActive: {
     backgroundColor: '#000000',
   },
   filterButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666666',
     fontWeight: '500',
   },
@@ -274,8 +416,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 16,
     backgroundColor: '#f5f5f5',
   },
@@ -283,7 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   categoryChipText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666666',
     fontWeight: '500',
   },
@@ -291,13 +433,45 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   listContent: {
-    gap: 12,
-    paddingBottom: 20,
+    gap: 8,
+    paddingBottom: 14,
+  },
+  summaryContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  summaryCard: {
+    flexGrow: 0,
+    minWidth: 130,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#666666',
+    marginBottom: 2,
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  incomeText: {
+    color: '#16a34a',
+  },
+  expenseText: {
+    color: '#dc2626',
   },
   transactionCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 12,
     elevation: 2,
   },
   transactionHeader: {
@@ -307,7 +481,7 @@ const styles = StyleSheet.create({
   },
   transactionInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
   titleRow: {
     flexDirection: 'row',
@@ -316,10 +490,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   description: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#000000',
-    marginRight: 8,
+    marginRight: 6,
   },
   badgeContainer: {
     flexDirection: 'row',
@@ -348,14 +522,14 @@ const styles = StyleSheet.create({
   detailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   date: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666666',
   },
   notes: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666666',
     flex: 1,
   },
@@ -367,7 +541,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   incomeAmount: {
@@ -387,14 +561,15 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
+    marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#f5f5f5',
-    paddingTop: 12,
+    paddingTop: 10,
   },
   actionButton: {
-    flex: 1,
-    padding: 8,
+    minWidth: 90,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderRadius: 6,
     alignItems: 'center',
   },
@@ -405,7 +580,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   deleteButtonText: {
@@ -423,3 +598,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

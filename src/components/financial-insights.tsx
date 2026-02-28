@@ -1,64 +1,52 @@
-import React from 'react';
+﻿import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-interface Insight {
+export interface Insight {
   title: string;
   description: string;
-  type: "positive" | "warning" | "negative";
+  type: 'positive' | 'warning' | 'negative';
   value?: string;
 }
 
-// Mock insights - serão gerados dinamicamente baseados nos dados reais
-const mockInsights: Insight[] = [
+const fallbackInsights: Insight[] = [
   {
-    title: "Economia este mês",
-    description: "Você gastou 15% menos que no mês passado. Continue assim!",
-    type: "positive",
-    value: "R$ 320",
+    title: 'Economia este mes',
+    description: 'Voce gastou menos que no mes passado. Continue assim.',
+    type: 'positive',
   },
   {
-    title: "Categoria em alta",
-    description: "Seus gastos com alimentação aumentaram 25% este mês.",
-    type: "warning",
-    value: "Alimentação",
-  },
-  {
-    title: "Meta de poupança",
-    description: "Você está 75% próximo da sua meta mensal de R$ 1.000.",
-    type: "positive",
-    value: "75%",
-  },
-  {
-    title: "Atenção aos gastos",
-    description: "Você gastou mais que a média nos últimos 3 dias.",
-    type: "warning",
+    title: 'Categoria em alta',
+    description: 'Monitore a categoria que mais cresce para evitar surpresas.',
+    type: 'warning',
   },
 ];
 
-export function FinancialInsights() {
-  const getInsightColor = (type: Insight["type"]) => {
+export function FinancialInsights({ insights }: { insights?: Insight[] }) {
+  const list = insights && insights.length > 0 ? insights : fallbackInsights;
+
+  const getInsightColor = (type: Insight['type']) => {
     switch (type) {
-      case "positive":
+      case 'positive':
         return styles.positiveBadge;
-      case "warning":
+      case 'warning':
         return styles.warningBadge;
-      case "negative":
+      case 'negative':
         return styles.negativeBadge;
       default:
         return styles.defaultBadge;
     }
   };
 
-  const getInsightIcon = (type: Insight["type"]) => {
+  const getInsightIcon = (type: Insight['type']) => {
     switch (type) {
-      case "positive":
-        return "✓";
-      case "warning":
-        return "⚠";
-      case "negative":
-        return "!";
+      case 'positive':
+        return 'OK';
+      case 'warning':
+        return '!';
+      case 'negative':
+        return 'X';
       default:
-        return "•";
+        return '-';
     }
   };
 
@@ -66,33 +54,23 @@ export function FinancialInsights() {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>Insights Financeiros</Text>
-        <Text style={styles.cardDescription}>
-          Análises personalizadas das suas finanças
-        </Text>
+        <Text style={styles.cardDescription}>Analises personalizadas das suas financas</Text>
       </View>
-      
+
       <ScrollView style={styles.cardContent} showsVerticalScrollIndicator={false}>
         <View style={styles.insightsContainer}>
-          {mockInsights.map((insight, index) => (
-            <View key={index} style={styles.insightItem}>
-              {/* Badge/Ícone */}
+          {list.map((insight, index) => (
+            <View key={`${insight.title}-${index}`} style={styles.insightItem}>
               <View style={[styles.badge, getInsightColor(insight.type)]}>
-                <Text style={styles.badgeText}>
-                  {getInsightIcon(insight.type)}
-                </Text>
+                <Text style={styles.badgeText}>{getInsightIcon(insight.type)}</Text>
               </View>
 
-              {/* Conteúdo do Insight */}
               <View style={styles.insightContent}>
                 <View style={styles.insightHeader}>
                   <Text style={styles.insightTitle}>{insight.title}</Text>
-                  {insight.value && (
-                    <Text style={styles.insightValue}>{insight.value}</Text>
-                  )}
+                  {insight.value && <Text style={styles.insightValue}>{insight.value}</Text>}
                 </View>
-                <Text style={styles.insightDescription}>
-                  {insight.description}
-                </Text>
+                <Text style={styles.insightDescription}>{insight.description}</Text>
               </View>
             </View>
           ))}
@@ -151,33 +129,24 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 'bold',
   },
   positiveBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)', // chart-3/10 - green
-    borderColor: 'rgba(34, 197, 94, 0.2)', // chart-3/20
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderColor: 'rgba(34, 197, 94, 0.2)',
   },
   warningBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)', // chart-4/10 - amber
-    borderColor: 'rgba(245, 158, 11, 0.2)', // chart-4/20
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderColor: 'rgba(245, 158, 11, 0.2)',
   },
   negativeBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)', // destructive/10 - red
-    borderColor: 'rgba(239, 68, 68, 0.2)', // destructive/20
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: 'rgba(239, 68, 68, 0.2)',
   },
   defaultBadge: {
-    backgroundColor: '#f5f5f5', // muted
+    backgroundColor: '#f5f5f5',
     borderColor: '#e5e5e5',
-  },
-  positiveBadgeText: {
-    color: '#16a34a', // chart-3 - green
-  },
-  warningBadgeText: {
-    color: '#d97706', // chart-4 - amber
-  },
-  negativeBadgeText: {
-    color: '#dc2626', // destructive - red
   },
   insightContent: {
     flex: 1,
@@ -199,12 +168,12 @@ const styles = StyleSheet.create({
   insightValue: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#000000', // text-primary
+    color: '#000000',
     flexShrink: 0,
   },
   insightDescription: {
     fontSize: 14,
-    color: '#666666', // text-muted-foreground
+    color: '#666666',
     lineHeight: 20,
   },
 });

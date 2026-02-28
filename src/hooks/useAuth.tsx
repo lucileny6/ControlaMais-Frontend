@@ -25,11 +25,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const checkAuthState = async () => {
         try {
-            const token = await AsyncStorage.getItem('@authToken');
-            const savedUser = await AsyncStorage.getItem('@user');
+            const [token, legacyToken, savedUser, legacySavedUser] = await Promise.all([
+                AsyncStorage.getItem('@authToken'),
+                AsyncStorage.getItem('authToken'),
+                AsyncStorage.getItem('@user'),
+                AsyncStorage.getItem('user'),
+            ]);
+            const authToken = token || legacyToken;
+            const userFromStorage = savedUser || legacySavedUser;
 
-            if (token && savedUser) {
-                setUser(JSON.parse(savedUser));
+            if (authToken && userFromStorage) {
+                setUser(JSON.parse(userFromStorage));
             }
         } catch (error) {
             console.error('Error checking auth state:', error);
@@ -48,8 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (response.success && response.user && response.token) {
                 const { user: userData, token } = response;
                 
-                await AsyncStorage.setItem('@authToken', token);
-                await AsyncStorage.setItem('@user', JSON.stringify(userData));
+                const serializedUser = JSON.stringify(userData);
+                await AsyncStorage.multiSet([
+                    ['@authToken', token],
+                    ['authToken', token],
+                    ['@user', serializedUser],
+                    ['user', serializedUser],
+                ]);
                 
                 setUser(userData);
                 
@@ -76,8 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (response.success && response.user && response.token) {
                 const { user: userData, token } = response;
 
-                await AsyncStorage.setItem('@authToken', token);
-                await AsyncStorage.setItem('@user', JSON.stringify(userData));
+                const serializedUser = JSON.stringify(userData);
+                await AsyncStorage.multiSet([
+                    ['@authToken', token],
+                    ['authToken', token],
+                    ['@user', serializedUser],
+                    ['user', serializedUser],
+                ]);
                 
                 setUser(userData);
                 
@@ -98,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await apiService.logout();
             
-            await AsyncStorage.multiRemove(['@authToken', '@user']);
+            await AsyncStorage.multiRemove(['@authToken', '@user', 'authToken', 'user']);
             
             setUser(null);
             
@@ -107,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             console.error("Logout error:", error);
             
-            await AsyncStorage.multiRemove(['@authToken', '@user']);
+            await AsyncStorage.multiRemove(['@authToken', '@user', 'authToken', 'user']);
             setUser(null);
             router.replace('/login');
         }

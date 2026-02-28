@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Modal,
@@ -74,6 +74,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+
+  useEffect(() => {
+    setFormData({
+      description: initialData?.description || "",
+      amount: initialData?.amount?.toString() || "",
+      type: initialData?.type || "income",
+      category: initialData?.category || "",
+      date: initialData?.date || new Date().toISOString().split("T")[0],
+      notes: initialData?.notes || "",
+    });
+  }, [initialData]);
 
   const categories =
     formData.type === "income" ? incomeCategories : expenseCategories;
