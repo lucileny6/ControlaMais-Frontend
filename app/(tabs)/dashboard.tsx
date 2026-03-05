@@ -21,10 +21,119 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 interface User {
   name?: string;
   nome?: string;
+  nomeCompleto?: string;
+  displayName?: string;
   userName?: string;
+  user_name?: string;
   username?: string;
   fullName?: string;
+  firstName?: string;
+  given_name?: string;
   email?: string;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+
+    const decodeBase64 = (globalThis as any)?.atob;
+    if (typeof decodeBase64 !== "function") return null;
+    const json = decodeBase64(padded);
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function getStringClaim(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function resolveUserName(user: User | null) {
+  if (!user) return "";
+
+  const emailPrefix = user.email?.includes("@") ? user.email.split("@")[0].trim().toLowerCase() : "";
+  const candidates = [
+    user.displayName,
+    user.nomeCompleto,
+    user.nome,
+    user.fullName,
+    user.firstName,
+    user.given_name,
+    user.name,
+    user.userName,
+    user.user_name,
+    user.username,
+  ];
+
+  const secondaryCandidates = [
+    user.fullName,
+    user.name,
+    user.userName,
+    user.user_name,
+    user.username,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate ?? "").trim();
+    if (!value) continue;
+    if (emailPrefix && value.toLowerCase() === emailPrefix) continue;
+    if (/\d/.test(value)) continue;
+    return value;
+  }
+
+  for (const candidate of secondaryCandidates) {
+    const value = String(candidate ?? "").trim();
+    if (!value) continue;
+    if (emailPrefix && value.toLowerCase() === emailPrefix) continue;
+    return value;
+  }
+
+  return "";
+}
+
+function getUserFromToken(token: string): User | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+
+  const email = getStringClaim(payload, ["email", "upn"]);
+  const sub = getStringClaim(payload, ["sub"]);
+  const name = getStringClaim(payload, [
+    "name",
+    "nome",
+    "nomeCompleto",
+    "displayName",
+    "fullName",
+    "firstName",
+    "given_name",
+    "preferred_username",
+    "user_name",
+    "username",
+  ]);
+
+  const resolvedEmail = email || (sub.includes("@") ? sub : "");
+  const resolvedName = name;
+
+  if (!resolvedName && !resolvedEmail) return null;
+  return { name: resolvedName || undefined, email: resolvedEmail || undefined };
+}
+
+function mergeUsers(primary: User | null, fallback: User | null): User | null {
+  if (!primary && !fallback) return null;
+  return {
+    ...fallback,
+    ...primary,
+  };
 }
 
 const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
@@ -42,57 +151,65 @@ export default function PageDashboard() {
   const isDesktopWide = width >= 1180;
 
   const getDisplayName = (currentUser: User | null) => {
-    if (!currentUser) return "";
-
-    const rawName =
-      currentUser.name ??
-      currentUser.nome ??
-      currentUser.fullName ??
-      currentUser.userName ??
-      currentUser.username ??
-      "";
-
-    if (rawName && rawName.trim().length > 0) {
-      return rawName.trim();
-    }
-
-    if (currentUser.email && currentUser.email.includes("@")) {
-      return currentUser.email.split("@")[0];
-    }
-
-    return "";
+    const resolved = resolveUserName(currentUser);
+    if (resolved) return resolved;
+    if (currentUser?.email?.includes("@")) return currentUser.email.split("@")[0];
+    return "Usuario";
   };
 
   const displayName = getDisplayName(user);
-
   useEffect(() => {
     checkAuthentication();
   }, []);
 
   const checkAuthentication = async () => {
     try {
-      const [storedUser, legacyStoredUser, authToken, legacyAuthToken] = await Promise.all([
+      const [
+        storedUser,
+        legacyStoredUser,
+        storedDisplayName,
+        legacyDisplayName,
+        authToken,
+        legacyAuthToken
+      ] = await Promise.all([
         AsyncStorage.getItem("user"),
         AsyncStorage.getItem("@user"),
+        AsyncStorage.getItem("displayName"),
+        AsyncStorage.getItem("@displayName"),
         AsyncStorage.getItem("authToken"),
         AsyncStorage.getItem("@authToken"),
       ]);
+
       const token = authToken || legacyAuthToken;
       const userFromStorage = storedUser || legacyStoredUser;
+      const displayNameFromStorage = (storedDisplayName || legacyDisplayName || "").trim();
 
       if (!token) {
         router.replace("/login");
         return;
       }
 
+      let parsedUser: User | null = null;
+
       if (userFromStorage) {
-        setUser(JSON.parse(userFromStorage));
-      } else {
-        setUser(null);
+        try {
+          parsedUser = JSON.parse(userFromStorage) as User;
+        } catch {
+          parsedUser = null;
+        }
       }
+
+      if (displayNameFromStorage) {
+        parsedUser = {
+          ...(parsedUser ?? {}),
+          displayName: displayNameFromStorage,
+        };
+      }
+
+      const tokenUser = getUserFromToken(token);
+      setUser(mergeUsers(parsedUser, tokenUser));
     } catch (error) {
-      console.error("Erro ao verificar autenticacao:", error);
-      router.replace("/login");
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -132,9 +249,7 @@ export default function PageDashboard() {
               <View style={styles.dashboardContent}>
                 <View style={styles.welcomeSection}>
                   <Text style={styles.title}>Painel</Text>
-                  <Text style={styles.subtitle}>
-                    {displayName ? `Bem-vindo, ${displayName}` : "Bem-vindo"}
-                  </Text>
+                  <Text style={styles.subtitle}>{`Bem-vindo, ${displayName}`}</Text>
                 </View>
 
                 <FinancialOverview

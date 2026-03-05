@@ -19,7 +19,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
           <Text style={styles.empty}>Nenhuma transacao recente</Text>
         ) : (
           <View style={styles.list}>
-            {transactions.map((transaction) => (
+            {transactions.slice(0, 5).map((transaction) => (
               <View key={transaction.id} style={styles.row}>
                 <View style={styles.leftBlock}>
                   <Text style={styles.description}>{transaction.description}</Text>

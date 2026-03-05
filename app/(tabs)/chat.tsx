@@ -4,7 +4,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { chatIAService } from "@/services/chatIA";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -41,7 +41,7 @@ export default function ChatPage() {
     {
       id: "1",
       content:
-        "OlÃ¡! Posso te ajudar a registrar receitas e despesas usando linguagem natural ðŸ˜Š",
+        "Olá! Posso te ajudar a registrar receitas e despesas usando linguagem natural",
       isUser: false,
       timestamp: new Date(),
     },
@@ -49,6 +49,15 @@ export default function ChatPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+
+    return () => clearTimeout(timeout);
+  }, [messages, isLoading, aguardandoConfirmacao]);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
@@ -80,7 +89,7 @@ export default function ChatPage() {
         ...prev,
         {
           id: Date.now().toString(),
-          content: "Erro ao comunicar com o servidor ðŸ˜•",
+          content: "Erro ao comunicar com o servidor",
           isUser: false,
           timestamp: new Date(),
         },
@@ -117,7 +126,13 @@ export default function ChatPage() {
               style={{ flex: 1 }}
               behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
-              <ScrollView style={styles.messagesContainer}>
+              <ScrollView
+                ref={scrollViewRef}
+                style={styles.messagesContainer}
+                onContentSizeChange={() =>
+                  scrollViewRef.current?.scrollToEnd({ animated: true })
+                }
+              >
                 {messages.map((msg) => (
                   <ChatMessage
                     key={msg.id}
@@ -129,7 +144,7 @@ export default function ChatPage() {
 
                 {aguardandoConfirmacao && (
                   <View style={styles.confirmBox}>
-                    <Text style={styles.confirmText}>Deseja confirmar a aÃ§Ã£o?</Text>
+                    <Text style={styles.confirmText}>Deseja confirmar a sessao?</Text>
 
                     <View style={styles.confirmButtons}>
                       <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>

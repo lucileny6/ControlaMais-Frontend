@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface User {
@@ -27,12 +27,61 @@ interface ReportTransaction {
 }
 
 const DASHBOARD_GRADIENT = ['#000000', '#073D33', '#107A65', '#20F4CA'] as const;
+const CATEGORY_ORDER = ['Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Lazer'] as const;
+
+const getBudgetRulesByIncome = (income: number) => {
+  if (income <= 1800) {
+    return {
+      Moradia: 0.40,
+      Alimentação: 0.30,
+      Transporte: 0.10,
+      Saúde: 0.10,
+      Lazer: 0.10,
+    } as const;
+  }
+
+  if (income <= 4000) {
+    return {
+      Moradia: 0.35,
+      Alimentação: 0.25,
+      Transporte: 0.15,
+      Saúde: 0.10,
+      Lazer: 0.15,
+    } as const;
+  }
+
+  if (income <= 8000) {
+    return {
+      Moradia: 0.30,
+      Alimentação: 0.20,
+      Transporte: 0.20,
+      Saúde: 0.10,
+      Lazer: 0.20,
+    } as const;
+  }
+
+  return {
+    Moradia: 0.25,
+    Alimentação: 0.15,
+    Transporte: 0.20,
+    Saúde: 0.10,
+    Lazer: 0.30,
+  } as const;
+};
 
 export default function ReportsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  });
+  const [monthInput, setMonthInput] = useState(() => {
+    const now = new Date();
+    return `${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  });
   const [monthlySummaryData, setMonthlySummaryData] = useState<MonthlySummaryData | undefined>(undefined);
   const [monthlyChartData, setMonthlyChartData] = useState<MonthlyChartPoint[]>([]);
   const [expenseChartData, setExpenseChartData] = useState<ExpenseData[]>([]);
@@ -48,9 +97,69 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!isLoading) {
-      void loadReportData();
+      void loadReportData(selectedMonth);
     }
-  }, [isLoading]);
+  }, [isLoading, selectedMonth]);
+
+  const parseTransactionDate = (value: unknown): Date | null => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+
+    const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const brSlashPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+    const isoMonthPattern = /^(\d{4})-(\d{2})$/;
+    const monthYearPattern = /^(\d{2})-(\d{4})$/;
+
+    let parsed: Date;
+    if (isoDatePattern.test(raw)) {
+      const [, year, month, day] = raw.match(isoDatePattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (brSlashPattern.test(raw)) {
+      const [, day, month, year] = raw.match(brSlashPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (brDashPattern.test(raw)) {
+      const [, day, month, year] = raw.match(brDashPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (isoMonthPattern.test(raw)) {
+      const [, year, month] = raw.match(isoMonthPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, 1);
+    } else if (monthYearPattern.test(raw)) {
+      const [, month, year] = raw.match(monthYearPattern)!;
+      parsed = new Date(Number(year), Number(month) - 1, 1);
+    } else {
+      parsed = new Date(raw);
+    }
+
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  };
+
+  const normalizeCategoryKey = (value: string) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
+  const parseMonthYear = (value: string) => {
+    const normalized = String(value ?? '').trim();
+    const brMatch = normalized.match(/^(\d{2})-(\d{4})$/);
+    const isoMatch = normalized.match(/^(\d{4})-(\d{2})$/);
+    const match = brMatch ?? isoMatch;
+    if (!match) return null;
+
+    const year = brMatch ? Number(match[2]) : Number(match[1]);
+    const month = brMatch ? Number(match[1]) : Number(match[2]);
+    if (month < 1 || month > 12) return null;
+
+    return {
+      year,
+      month,
+      monthIndex: month - 1,
+      labelDate: new Date(year, month - 1, 1),
+    };
+  };
 
   const checkAuthentication = async () => {
     try {
@@ -81,7 +190,16 @@ export default function ReportsPage() {
     }
   };
 
-  const loadReportData = async () => {
+  const applyMonthFilter = () => {
+    const parsed = parseMonthYear(monthInput);
+    if (!parsed) {
+      Alert.alert('Mês inválido', 'Use o formato MM-AAAA. Exemplo: 03-2026');
+      return;
+    }
+    setSelectedMonth(`${String(parsed.month).padStart(2, '0')}-${parsed.year}`);
+  };
+
+  const loadReportData = async (monthReference: string) => {
     try {
       setReportLoading(true);
       const data = await apiService.getTransactions();
@@ -98,11 +216,13 @@ export default function ReportsPage() {
         date: String(t?.date ?? t?.data ?? new Date().toISOString()),
       }));
 
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
+      const baseMonthParsed = parseMonthYear(monthReference);
+      const baseDate = baseMonthParsed?.labelDate ?? new Date();
+      const currentMonth = baseDate.getMonth();
+      const currentYear = baseDate.getFullYear();
       const currentMonthTransactions = normalized.filter((transaction) => {
-        const date = new Date(transaction.date);
+        const date = parseTransactionDate(transaction.date);
+        if (!date) return false;
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
 
@@ -121,11 +241,21 @@ export default function ReportsPage() {
           expensesByCategoryMap.set(transaction.category, current + transaction.amount);
         });
 
-      const expensesByCategory = Array.from(expensesByCategoryMap.entries()).map(([category, amount]) => ({
-        category,
-        amount,
-        budget: amount,
-      }));
+      const budgetRules = getBudgetRulesByIncome(totalIncome);
+      const expensesByCategory = CATEGORY_ORDER.map((category) => {
+        const amount = Array.from(expensesByCategoryMap.entries()).reduce((acc, [rawCategory, rawAmount]) => {
+          if (normalizeCategoryKey(rawCategory) === normalizeCategoryKey(category)) {
+            return acc + rawAmount;
+          }
+          return acc;
+        }, 0);
+
+        return {
+          category,
+          amount,
+          budget: totalIncome * budgetRules[category],
+        };
+      });
 
       const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
       const chartData: MonthlyChartPoint[] = Array.from({ length: 6 }).map((_, offset) => {
@@ -133,7 +263,8 @@ export default function ReportsPage() {
         const month = date.getMonth();
         const year = date.getFullYear();
         const monthTransactions = normalized.filter((transaction) => {
-          const transactionDate = new Date(transaction.date);
+          const transactionDate = parseTransactionDate(transaction.date);
+          if (!transactionDate) return false;
           return transactionDate.getMonth() === month && transactionDate.getFullYear() === year;
         });
         return {
@@ -156,6 +287,7 @@ export default function ReportsPage() {
 
       const savings = totalIncome - totalExpenses;
       const savingsRate = totalIncome > 0 ? (savings / totalIncome) * 100 : 0;
+
       const topCategory = [...chartExpenses].sort((a, b) => b.amount - a.amount)[0];
 
       const generatedInsights: Insight[] = [
@@ -187,7 +319,7 @@ export default function ReportsPage() {
         totalExpenses,
         savings,
         savingsGoal: Math.max(totalIncome * 0.2, 1),
-        monthLabel: now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        monthLabel: baseDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
         expensesByCategory,
       });
       setMonthlyChartData(chartData);
@@ -230,6 +362,17 @@ export default function ReportsPage() {
               <View style={styles.pageContent}>
                 <View style={styles.header}>
                   <Text style={styles.title}>Relatorios</Text>
+                  <View style={styles.monthFilterRow}>
+                    <TextInput
+                      style={styles.monthInput}
+                      placeholder="MM-AAAA"
+                      value={monthInput}
+                      onChangeText={setMonthInput}
+                    />
+                    <TouchableOpacity style={styles.monthFilterButton} onPress={applyMonthFilter}>
+                      <Text style={styles.monthFilterButtonText}>Aplicar mês</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={styles.section}>
@@ -328,12 +471,40 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    gap: 10,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: '#FFFFFF',
     marginBottom: 4,
+  },
+  monthFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  monthInput: {
+    width: 120,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#111827',
+  },
+  monthFilterButton: {
+    backgroundColor: '#0B6E5B',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  monthFilterButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ECFEFF',
   },
   section: {
     marginBottom: 24,

@@ -9,16 +9,9 @@ export interface ExpenseData {
   color: string;
 }
 
-const fallbackExpenseData: ExpenseData[] = [
-  { category: 'Alimentacao', amount: 450, color: '#3b82f6' },
-  { category: 'Transporte', amount: 200, color: '#ef4444' },
-  { category: 'Contas', amount: 300, color: '#10b981' },
-  { category: 'Lazer', amount: 150, color: '#f59e0b' },
-  { category: 'Saude', amount: 100, color: '#8b5cf6' },
-];
-
 export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
-  const expenseData = data && data.length > 0 ? data : fallbackExpenseData;
+  const expenseData = data ?? [];
+  const hasData = expenseData.length > 0;
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
 
@@ -42,64 +35,70 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
       </CardHeader>
 
       <CardContent style={styles.cardContent}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.chartContainer}>
-            <Svg width={chartSize} height={chartSize} style={styles.svg}>
-              <G rotation={-90} origin={`${center}, ${center}`}>
-                {(() => {
-                  let currentAngle = 0;
-                  const circumference = 2 * Math.PI * radius;
+        {hasData ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <View style={styles.chartContainer}>
+              <Svg width={chartSize} height={chartSize} style={styles.svg}>
+                <G rotation={-90} origin={`${center}, ${center}`}>
+                  {(() => {
+                    let currentAngle = 0;
+                    const circumference = 2 * Math.PI * radius;
 
-                  return expenseData.map((item, index) => {
-                    const percentage = total > 0 ? (item.amount / total) : 0;
-                    const strokeDasharray = `${percentage * circumference} ${circumference}`;
+                    return expenseData.map((item, index) => {
+                      const percentage = total > 0 ? (item.amount / total) : 0;
+                      const strokeDasharray = `${percentage * circumference} ${circumference}`;
 
-                    const segment = (
-                      <Circle
-                        key={index}
-                        cx={center}
-                        cy={center}
-                        r={radius}
-                        stroke={item.color}
-                        strokeWidth={isLargeScreen ? 32 : 28}
-                        strokeDasharray={strokeDasharray}
-                        strokeDashoffset={-currentAngle * circumference / 360}
-                        fill="transparent"
-                      />
-                    );
+                      const segment = (
+                        <Circle
+                          key={index}
+                          cx={center}
+                          cy={center}
+                          r={radius}
+                          stroke={item.color}
+                          strokeWidth={isLargeScreen ? 32 : 28}
+                          strokeDasharray={strokeDasharray}
+                          strokeDashoffset={-currentAngle * circumference / 360}
+                          fill="transparent"
+                        />
+                      );
 
-                    currentAngle += percentage * 360;
-                    return segment;
-                  });
-                })()}
-              </G>
-            </Svg>
+                      currentAngle += percentage * 360;
+                      return segment;
+                    });
+                  })()}
+                </G>
+              </Svg>
 
-            <View style={[styles.centerLabel, { top: center - 20 }]}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalAmount}>R$ {formatCurrency(total)}</Text>
+              <View style={[styles.centerLabel, { top: center - 20 }]}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalAmount}>R$ {formatCurrency(total)}</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.legend}>
-            {expenseData.map((item, index) => {
-              const percentage = total > 0 ? ((item.amount / total) * 100).toFixed(1) : '0.0';
+            <View style={styles.legend}>
+              {expenseData.map((item, index) => {
+                const percentage = total > 0 ? ((item.amount / total) * 100).toFixed(1) : '0.0';
 
-              return (
-                <View key={`${item.category}-${index}`} style={styles.legendItem}>
-                  <View style={styles.legendLeft}>
-                    <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-                    <Text style={styles.categoryText}>{item.category}</Text>
+                return (
+                  <View key={`${item.category}-${index}`} style={styles.legendItem}>
+                    <View style={styles.legendLeft}>
+                      <View style={[styles.colorDot, { backgroundColor: item.color }]} />
+                      <Text style={styles.categoryText}>{item.category}</Text>
+                    </View>
+                    <View style={styles.legendRight}>
+                      <Text style={styles.amountText}>R$ {formatCurrency(item.amount)}</Text>
+                      <Text style={styles.percentageText}>({percentage}%)</Text>
+                    </View>
                   </View>
-                  <View style={styles.legendRight}>
-                    <Text style={styles.amountText}>R$ {formatCurrency(item.amount)}</Text>
-                    <Text style={styles.percentageText}>({percentage}%)</Text>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
+          </ScrollView>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Sem despesas no mes atual.</Text>
           </View>
-        </ScrollView>
+        )}
       </CardContent>
     </Card>
   );
@@ -181,5 +180,15 @@ const styles = StyleSheet.create({
   percentageText: {
     fontSize: 12,
     color: '#666666',
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748b',
   },
 });

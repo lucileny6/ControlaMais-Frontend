@@ -17,6 +17,26 @@ interface TransactionFormData {
   notes?: string;
 }
 
+const normalizeDateToIso = (value: string) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return new Date().toISOString().split("T")[0];
+
+  const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const brSlashPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+  if (isoPattern.test(raw)) return raw;
+  if (brSlashPattern.test(raw)) {
+    const [, day, month, year] = raw.match(brSlashPattern)!;
+    return `${year}-${month}-${day}`;
+  }
+  if (brDashPattern.test(raw)) {
+    const [, day, month, year] = raw.match(brDashPattern)!;
+    return `${year}-${month}-${day}`;
+  }
+  return raw;
+};
+
 export default function NewTransactionPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -30,7 +50,7 @@ export default function NewTransactionPage() {
           descricao: data.description,
           valor: data.amount,
           categoria: data.category,
-          data: data.date,
+          data: normalizeDateToIso(data.date),
           observacao: data.notes,
         });
       } else {
@@ -38,15 +58,16 @@ export default function NewTransactionPage() {
           descricao: data.description,
           valor: data.amount,
           categoria: data.category,
-          data: data.date,
+          data: normalizeDateToIso(data.date),
           observacao: data.notes,
         });
       }
 
       Alert.alert("Sucesso", "Transação cadastrada com sucesso!");
       router.replace("/dashboard");
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível cadastrar a transação");
+    } catch (error: any) {
+      const message = String(error?.message ?? "Nao foi possivel cadastrar a transacao");
+      Alert.alert("Erro", `Nao foi possivel cadastrar a transacao: ${message}`);
     } finally {
       setLoading(false);
     }

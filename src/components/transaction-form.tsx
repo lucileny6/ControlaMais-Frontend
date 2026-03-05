@@ -36,21 +36,17 @@ interface TransactionFormProps {
 
 const incomeCategories = [
   "Salário",
-  "Freelance",
-  "Investimentos",
-  "Vendas",
-  "Outros",
+  "Comissão",
+  "Renda extra",
 ];
 
 const expenseCategories = [
   "Alimentação",
+  "Moradia",
   "Transporte",
   "Contas",
-  "Saúde",
-  "Educação",
   "Lazer",
-  "Compras",
-  "Outros",
+  "Saúde",
 ];
 
 /* ==============================
@@ -107,6 +103,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const categories =
     formData.type === "income" ? incomeCategories : expenseCategories;
+  const handleExitCategoryPicker = () => {
+    setShowCategoryPicker(false);
+  };
 
   /* ==============================
      SUBMIT
@@ -265,7 +264,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       </Modal>
 
       {/* MODAL CATEGORIA */}
-      <Modal transparent visible={showCategoryPicker} animationType="slide">
+      <Modal
+        transparent
+        visible={showCategoryPicker}
+        animationType="slide"
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -282,6 +286,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            <TouchableOpacity
+              style={styles.modalExitButton}
+              onPress={handleExitCategoryPicker}
+            >
+              <Text style={styles.modalExitButtonText}>Sair</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -329,15 +339,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     flexDirection: "row",
     justifyContent: "space-between",
   },
   selectValue: {
-    fontSize: 16,
+    fontSize: 14,
   },
   selectArrow: {
-    fontSize: 12,
+    fontSize: 11,
   },
   submit: {
     backgroundColor: "#000",
@@ -363,12 +374,26 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#fff",
-    width: "80%",
+    width: "88%",
+    maxWidth: 320,
     borderRadius: 12,
-    padding: 16,
+    padding: 10,
+    maxHeight: 300,
   },
   modalOption: {
-    padding: 12,
+    paddingVertical: 8,
     alignItems: "center",
+  },
+  modalExitButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    alignItems: "center",
+  },
+  modalExitButtonText: {
+    color: "#374151",
+    fontWeight: "600",
   },
 });

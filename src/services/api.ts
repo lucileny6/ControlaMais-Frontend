@@ -101,6 +101,25 @@ export class ApiService {
     if (!response.ok) {
       const error: any = await response.json().catch(() => null);
       console.log(`[API] ${method} ${endpoint} error body:`, error);
+
+      if (response.status === 401 || response.status === 403) {
+        await AsyncStorage.multiRemove([
+          "authToken",
+          "user",
+          "displayName",
+          "@authToken",
+          "@user",
+          "@displayName",
+        ]);
+
+        const webEnv = globalThis as { location?: { pathname?: string; assign?: (url: string) => void } };
+        if (webEnv.location && webEnv.location.pathname !== "/login") {
+          webEnv.location.assign?.("/login");
+        }
+
+        throw new Error(error?.message || "Sessao expirada ou sem permissao. Faça login novamente.");
+      }
+
       throw new Error(error?.message || `Erro ${response.status} em ${method} ${endpoint}`);
     }
 
@@ -139,7 +158,14 @@ export class ApiService {
   }
 
   async logout() {
-    await AsyncStorage.multiRemove(["authToken", "user", "@authToken", "@user"]);
+    await AsyncStorage.multiRemove([
+      "authToken",
+      "user",
+      "displayName",
+      "@authToken",
+      "@user",
+      "@displayName",
+    ]);
   }
 
   /* ======================
@@ -275,6 +301,10 @@ export class ApiService {
       console.log("[API] GET /transacoes raw:", response);
       return extractList(response);
     } catch (error) {
+      const message = String((error as any)?.message ?? "");
+      if (message.includes("403") || message.includes("401") || message.toLowerCase().includes("sessao")) {
+        throw error;
+      }
       console.log("[API] GET /transacoes failed, trying /transaction:", error);
       const response = await this.request<any>("/transaction");
       console.log("[API] GET /transaction raw:", response);

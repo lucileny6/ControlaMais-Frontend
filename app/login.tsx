@@ -28,6 +28,45 @@ type LoginResponse = {
   };
 };
 
+type LoginUser = {
+  name?: string;
+  nome?: string;
+  nomeCompleto?: string;
+  displayName?: string;
+  fullName?: string;
+  firstName?: string;
+  given_name?: string;
+  username?: string;
+  userName?: string;
+  user_name?: string;
+};
+
+const resolveDisplayNameFromLogin = (user: unknown, email: string) => {
+  if (!user || typeof user !== "object") return "";
+  const u = user as LoginUser;
+
+  const preferredName = [
+    u.name,
+    u.nome,
+    u.nomeCompleto,
+    u.displayName,
+    u.fullName,
+    u.firstName,
+    u.given_name,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .find(Boolean);
+
+  if (preferredName) return preferredName;
+
+  const usernameCandidate = String(u.username ?? u.userName ?? u.user_name ?? "").trim();
+  const emailPrefix = email.includes("@") ? email.split("@")[0].trim().toLowerCase() : "";
+  if (usernameCandidate && usernameCandidate.toLowerCase() !== emailPrefix) {
+    return usernameCandidate;
+  }
+
+  return "";
+};
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -44,31 +83,37 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await AsyncStorage.multiRemove(["authToken", "user", "@authToken", "@user"]);
+      await AsyncStorage.multiRemove([
+        "authToken",
+        "user",
+        "displayName",
+        "@authToken",
+        "@user",
+        "@displayName",
+      ]);
 
-      const loginResponse = (await apiService.login(email, password)) as LoginResponse;
-      const responseData = loginResponse.data ?? loginResponse;
+      const response = (await apiService.login(email, password)) as LoginResponse;
+      const responseData = response.data ?? response;
       const token = responseData.token;
-      const message = responseData.message ?? loginResponse.message ?? "Login realizado com sucesso";
-      const user = responseData.user ?? loginResponse.user;
 
       if (!token) {
         throw new Error("Token de autenticacao nao retornado pelo backend");
       }
 
+      const resolvedName = resolveDisplayNameFromLogin(responseData.user, email);
+
       await AsyncStorage.multiSet([
         ["authToken", token],
         ["@authToken", token],
       ]);
-      if (user) {
-        const serializedUser = JSON.stringify(user);
+      if (resolvedName) {
         await AsyncStorage.multiSet([
-          ["user", serializedUser],
-          ["@user", serializedUser],
+          ["displayName", resolvedName],
+          ["@displayName", resolvedName],
         ]);
       }
 
-      Alert.alert("Sucesso!", message);
+      Alert.alert("Sucesso!", responseData.message ?? response.message ?? "Login realizado com sucesso");
       router.replace("/(tabs)/dashboard");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

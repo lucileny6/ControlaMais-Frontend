@@ -24,8 +24,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Transaction {
   id: string;
-  backendId: string;
-  deleteCandidates: string[];
+  backendId?: string;
+  deleteCandidates?: string[];
   description: string;
   amount: number;
   type: "income" | "expense";
@@ -179,13 +179,8 @@ export default function TransactionsPage() {
   }, []);
 
   const showMessage = (title: string, message: string) => {
-    if (Platform.OS === "web" && globalThis?.alert) {
-      globalThis.alert(`${title}\n${message}`);
-      return;
-    }
-    Alert.alert(title, message);
-  };
-
+  Alert.alert(title, message);
+};
   const checkAuthentication = async () => {
     try {
       const [authToken, legacyAuthToken] = await Promise.all([
@@ -282,8 +277,10 @@ export default function TransactionsPage() {
         id: `${transaction.type}-${transaction.backendId}-${index}`,
       }));
       setTransactions(normalized);
-    } catch {
-      showMessage("Erro", "Nao foi possivel carregar transacoes");
+    } catch (error: any) {
+      setTransactions([]);
+      const message = String(error?.message ?? "Nao foi possivel carregar transacoes");
+      showMessage("Erro", `Nao foi possivel carregar transacoes: ${message}`);
     }
   };
 
@@ -323,7 +320,7 @@ export default function TransactionsPage() {
         let updated = false;
         let lastError: unknown = null;
 
-        for (const candidateId of editingTransaction.deleteCandidates) {
+        for (const candidateId of editingTransaction.deleteCandidates ?? []) {
           try {
             await apiService.updateTransaction(candidateId, {
               ...payload,
@@ -343,14 +340,18 @@ export default function TransactionsPage() {
       } else if (data.type === "expense") {
         await apiService.createDespesa(payload);
       } else {
-        await apiService.createReceita(payload);
+        await apiService.createReceita({
+          ...payload,
+          categoria: data.category,
+        });
       }
 
       showMessage("Sucesso", editingTransaction ? "Transacao atualizada com sucesso!" : "Transacao cadastrada com sucesso!");
       await loadTransactions();
       resetModalState();
-    } catch {
-      showMessage("Erro", editingTransaction ? "Erro ao atualizar transacao" : "Erro ao salvar transacao");
+    } catch (error: any) {
+      const message = String(error?.message ?? "Erro ao salvar transacao");
+      showMessage("Erro", editingTransaction ? `Erro ao atualizar transacao: ${message}` : `Erro ao salvar transacao: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -361,7 +362,7 @@ export default function TransactionsPage() {
       let deleted = false;
       let lastError: unknown = null;
 
-      for (const candidateId of transaction.deleteCandidates) {
+      for (const candidateId of transaction.deleteCandidates ?? []) {
         try {
           await apiService.deleteTransaction(candidateId, transaction.type);
           deleted = true;
@@ -396,22 +397,32 @@ export default function TransactionsPage() {
 
   const handleDelete = (id: string) => {
     const transaction = transactions.find((item) => item.id === id);
+    if (!transaction) return;
 
     if (!transaction?.backendId || transaction.backendId.startsWith("tx-")) {
       showMessage("Erro", "Esta transacao nao possui um ID valido para exclusao.");
       return;
     }
 
-    if (Platform.OS === "web") {
-      const confirmed = globalThis?.confirm
-        ? globalThis.confirm("Tem certeza que deseja excluir esta transacao?")
-        : true;
-
-      if (confirmed) {
-        void executeDelete(transaction);
-      }
-      return;
-    }
+   if (Platform.OS === "web") {
+  Alert.alert(
+    "Excluir transacao",
+    "Tem certeza que deseja excluir esta transacao?",
+    [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Excluir",
+        style: "destructive",
+        onPress: () => {
+          if (transaction) {
+            void executeDelete(transaction);
+          }
+        },
+      },
+    ]
+  );
+  return;
+}
 
     Alert.alert("Excluir transacao", "Tem certeza que deseja excluir esta transacao?", [
       { text: "Cancelar", style: "cancel" },
@@ -665,7 +676,7 @@ export default function TransactionsPage() {
             setModalOpen(true);
           }}
         >
-          <Text style={styles.floatingButtonText}>+ Nova TransaÃ§Ã£o</Text>
+          <Text style={styles.floatingButtonText}>+ Nova Transação</Text>
         </TouchableOpacity>
 
         <Modal visible={periodPromptOpen} animationType="fade" transparent>

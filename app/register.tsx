@@ -41,6 +41,10 @@ export default function RegisterPage() {
 
     try {
       const res = (await apiService.register(name, email, password)) as RegisterResponse;
+      await AsyncStorage.multiSet([
+        ["displayName", name.trim()],
+        ["@displayName", name.trim()],
+      ]);
 
       if (res.token) {
         await AsyncStorage.multiSet([
