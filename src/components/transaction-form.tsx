@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 /* ==============================
-   TIPOS
+TIPOS
 ============================== */
 
 export interface TransactionFormData {
@@ -31,22 +31,32 @@ interface TransactionFormProps {
 }
 
 /* ==============================
-   CATEGORIAS
+CATEGORIAS
 ============================== */
 
-const incomeCategories = [
-  "Salário",
-  "Comissão",
-  "Renda extra",
-];
+const incomeCategories = ["Salário", "Comissão", "Renda extra"];
 
 const expenseCategories = [
-  "Alimentação",
   "Moradia",
-  "Transporte",
-  "Contas",
-  "Lazer",
-  "Saúde",
+  "Supermercado",
+  "Restaurante",
+  "Padaria",
+  "Açougue",
+  "Delivery",
+  "Combustível",
+  "Uber",
+  "Transporte público",
+  "Medicamentos",
+  "Plano de saúde",
+  "Academia",
+  "Streaming",
+  "Cinema",
+  "Viagens",
+  "Compras",
+  "Educação",
+  "Pets",
+  "Assinaturas",
+  "Tecnologia",
 ];
 
 /* ==============================
@@ -117,9 +127,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
-    const amount = Number(
-      formData.amount.replace(/\./g, "").replace(",", "."),
-    );
+    const amount = Number(formData.amount.replace(/\./g, "").replace(",", "."));
 
     if (isNaN(amount) || amount <= 0) {
       Alert.alert("Erro", "Valor inválido");
@@ -174,9 +182,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             placeholder="0,00"
             keyboardType="numeric"
             value={formData.amount}
-            onChangeText={(v) =>
-              setFormData((p) => ({ ...p, amount: v }))
-            }
+            onChangeText={(v) => setFormData((p) => ({ ...p, amount: v }))}
           />
         </View>
 
@@ -186,9 +192,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <TextInput
             style={styles.input}
             value={formData.description}
-            onChangeText={(v) =>
-              setFormData((p) => ({ ...p, description: v }))
-            }
+            onChangeText={(v) => setFormData((p) => ({ ...p, description: v }))}
           />
         </View>
 
@@ -213,9 +217,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             style={styles.input}
             placeholder="DD-MM-AAAA"
             value={formData.date}
-            onChangeText={(v) =>
-              setFormData((p) => ({ ...p, date: v }))
-            }
+            onChangeText={(v) => setFormData((p) => ({ ...p, date: v }))}
           />
         </View>
 
@@ -254,9 +256,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setShowTypePicker(false);
                 }}
               >
-                <Text>
-                  {t === "income" ? "Receita" : "Despesa"}
-                </Text>
+                <Text>{t === "income" ? "Receita" : "Despesa"}</Text>
               </TouchableOpacity>
             ))}
           </View>

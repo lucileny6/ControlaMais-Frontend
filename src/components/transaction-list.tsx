@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -8,8 +8,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
 
 interface Transaction {
   id: string;
@@ -58,7 +58,9 @@ export function TransactionList({
   };
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
+  const [filterType, setFilterType] = useState<"all" | "income" | "expense">(
+    "all",
+  );
   const [filterCategory, setFilterCategory] = useState("all");
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [startDate, setStartDate] = useState(toMonthYear(initialStartDate));
@@ -123,7 +125,9 @@ export function TransactionList({
     const description = String(transaction?.description ?? "");
     const type = transaction?.type ?? "expense";
     const category = String(transaction?.category ?? "");
-    const matchesSearch = description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = description
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesType = filterType === "all" || type === filterType;
     const matchesCategory =
       filterCategory === "all" ||
@@ -183,14 +187,21 @@ export function TransactionList({
       totalExpense,
       balance,
     });
-  }, [filteredTransactions, filterType, totalIncome, totalExpense, balance, onExportContextChange]);
+  }, [
+    filteredTransactions,
+    filterType,
+    totalIncome,
+    totalExpense,
+    balance,
+    onExportContextChange,
+  ]);
 
   const categories = Array.from(
     new Set(
       transactions
         .map((t) => String(t?.category ?? "").trim())
-        .filter((category) => category.length > 0)
-    )
+        .filter((category) => category.length > 0),
+    ),
   );
 
   const clearFilters = () => {
@@ -219,7 +230,9 @@ export function TransactionList({
     <View
       style={[
         styles.transactionCard,
-        item.type === "income" ? styles.transactionCardIncome : styles.transactionCardExpense,
+        item.type === "income"
+          ? styles.transactionCardIncome
+          : styles.transactionCardExpense,
       ]}
     >
       <View style={styles.transactionHeader}>
@@ -228,7 +241,9 @@ export function TransactionList({
             <View
               style={[
                 styles.typeDot,
-                item.type === "income" ? styles.typeDotIncome : styles.typeDotExpense,
+                item.type === "income"
+                  ? styles.typeDotIncome
+                  : styles.typeDotExpense,
               ]}
             />
             <Text style={styles.description}>{item.description}</Text>
@@ -244,10 +259,13 @@ export function TransactionList({
           <Text
             style={[
               styles.amount,
-              item.type === "income" ? styles.incomeAmount : styles.expenseAmount,
+              item.type === "income"
+                ? styles.incomeAmount
+                : styles.expenseAmount,
             ]}
           >
-            {item.type === "income" ? "+" : "-"} R$ {formatCurrency(item.amount)}
+            {item.type === "income" ? "+" : "-"} R${" "}
+            {formatCurrency(item.amount)}
           </Text>
         </View>
       </View>
@@ -265,7 +283,9 @@ export function TransactionList({
           onPress={() => onDelete(item.id)}
           hitSlop={8}
         >
-          <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Excluir</Text>
+          <Text style={[styles.actionButtonText, styles.deleteButtonText]}>
+            Excluir
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -323,45 +343,80 @@ export function TransactionList({
             <Text style={styles.toolbarLabel}>Tipo</Text>
             <View style={styles.typeRow}>
               <TouchableOpacity
-                style={[styles.typeButton, filterType === "all" && styles.typeButtonActive]}
+                style={[
+                  styles.typeButton,
+                  filterType === "all" && styles.typeButtonActive,
+                ]}
                 onPress={() => setFilterType("all")}
               >
-                <Text style={[styles.typeButtonText, filterType === "all" && styles.typeButtonTextActive]}>
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterType === "all" && styles.typeButtonTextActive,
+                  ]}
+                >
                   Todos
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.typeButton, filterType === "income" && styles.typeButtonActive]}
+                style={[
+                  styles.typeButton,
+                  filterType === "income" && styles.typeButtonActive,
+                ]}
                 onPress={() => setFilterType("income")}
               >
-                <Text style={[styles.typeButtonText, filterType === "income" && styles.typeButtonTextActive]}>
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterType === "income" && styles.typeButtonTextActive,
+                  ]}
+                >
                   Receitas
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.typeButton, filterType === "expense" && styles.typeButtonActive]}
+                style={[
+                  styles.typeButton,
+                  filterType === "expense" && styles.typeButtonActive,
+                ]}
                 onPress={() => setFilterType("expense")}
               >
-                <Text style={[styles.typeButtonText, filterType === "expense" && styles.typeButtonTextActive]}>
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterType === "expense" && styles.typeButtonTextActive,
+                  ]}
+                >
                   Despesas
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+          <TouchableOpacity
+            style={styles.clearFiltersButton}
+            onPress={clearFilters}
+          >
             <Text style={styles.clearFiltersText}>Limpar filtros</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
 
-      <Modal visible={categoryPickerOpen} transparent animationType="fade" onRequestClose={() => setCategoryPickerOpen(false)}>
+      <Modal
+        visible={categoryPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoryPickerOpen(false)}
+      >
         <View style={styles.categoryModalOverlay}>
           <View style={styles.categoryModalContent}>
             <Text style={styles.categoryModalTitle}>Selecionar categoria</Text>
             <ScrollView style={styles.categoryModalList}>
               <TouchableOpacity
-                style={[styles.categoryOption, filterCategory === "all" && styles.categoryOptionActive]}
+                style={[
+                  styles.categoryOption,
+                  filterCategory === "all" && styles.categoryOptionActive,
+                ]}
                 onPress={() => {
                   setFilterCategory("all");
                   setCategoryPickerOpen(false);
@@ -372,7 +427,10 @@ export function TransactionList({
               {categories.map((category, index) => (
                 <TouchableOpacity
                   key={`${category}-${index}`}
-                  style={[styles.categoryOption, filterCategory === category && styles.categoryOptionActive]}
+                  style={[
+                    styles.categoryOption,
+                    filterCategory === category && styles.categoryOptionActive,
+                  ]}
                   onPress={() => {
                     setFilterCategory(category);
                     setCategoryPickerOpen(false);
@@ -382,7 +440,10 @@ export function TransactionList({
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <TouchableOpacity style={styles.categoryCloseButton} onPress={() => setCategoryPickerOpen(false)}>
+            <TouchableOpacity
+              style={styles.categoryCloseButton}
+              onPress={() => setCategoryPickerOpen(false)}
+            >
               <Text style={styles.categoryCloseButtonText}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -403,12 +464,16 @@ export function TransactionList({
           </Text>
         </View>
         <View style={[styles.summaryCard, styles.summaryBalanceCard]}>
-          <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>Saldo</Text>
+          <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>
+            Saldo
+          </Text>
           <Text
             style={[
               styles.summaryValue,
               styles.summaryBalanceValue,
-              balance >= 0 ? styles.summaryBalancePositive : styles.summaryBalanceNegative,
+              balance >= 0
+                ? styles.summaryBalancePositive
+                : styles.summaryBalanceNegative,
             ]}
           >
             R$ {formatCurrency(balance)}
@@ -433,7 +498,9 @@ export function TransactionList({
         <FlatList
           data={filteredTransactions}
           renderItem={renderTransactionItem}
-          keyExtractor={(item, index) => `${item?.id || item?.date || "tx"}-${index}`}
+          keyExtractor={(item, index) =>
+            `${item?.id || item?.date || "tx"}-${index}`
+          }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
         />
@@ -451,8 +518,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   toolbarRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: 10,
     paddingBottom: 2,
   },
@@ -462,37 +529,37 @@ const styles = StyleSheet.create({
   },
   toolbarLabel: {
     fontSize: 11,
-    color: '#475569',
-    fontWeight: '600',
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   toolbarInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
     fontSize: 12,
     minWidth: 180,
   },
   toolbarPeriodRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
   },
   toolbarDateInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
     fontSize: 12,
     minWidth: 94,
   },
   toolbarSelect: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: "#e5e5e5",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -500,68 +567,68 @@ const styles = StyleSheet.create({
   },
   toolbarSelectText: {
     fontSize: 12,
-    color: '#0f172a',
-    fontWeight: '500',
+    color: "#0f172a",
+    fontWeight: "500",
   },
   typeRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
   },
   typeButton: {
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 6,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
+    backgroundColor: "#f5f5f5",
+    alignItems: "center",
     minHeight: 27,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   typeButtonActive: {
-    backgroundColor: '#000000',
+    backgroundColor: "#000000",
   },
   typeButtonText: {
     fontSize: 11,
-    color: '#666666',
-    fontWeight: '500',
+    color: "#666666",
+    fontWeight: "500",
   },
   typeButtonTextActive: {
-    color: '#ffffff',
+    color: "#ffffff",
   },
   clearFiltersButton: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: "#cbd5e1",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minHeight: 34,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   clearFiltersText: {
     fontSize: 12,
-    color: '#334155',
-    fontWeight: '600',
+    color: "#334155",
+    fontWeight: "600",
   },
   categoryModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   categoryModalContent: {
-    width: '100%',
+    width: "100%",
     maxWidth: 380,
-    maxHeight: '75%',
-    backgroundColor: '#ffffff',
+    maxHeight: "75%",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 14,
     gap: 10,
   },
   categoryModalTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
+    fontWeight: "700",
+    color: "#0f172a",
   },
   categoryModalList: {
     maxHeight: 280,
@@ -572,22 +639,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   categoryOptionActive: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
   },
   categoryOptionText: {
     fontSize: 14,
-    color: '#0f172a',
+    color: "#0f172a",
   },
   categoryCloseButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#111827',
+    alignSelf: "flex-end",
+    backgroundColor: "#111827",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   categoryCloseButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
+    color: "#ffffff",
+    fontWeight: "600",
     fontSize: 12,
   },
   listContent: {
@@ -595,7 +662,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   summaryContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     marginBottom: 12,
   },
@@ -606,21 +673,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     minHeight: 82,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   summaryIncomeCard: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#86efac',
+    backgroundColor: "#ecfdf5",
+    borderColor: "#86efac",
   },
   summaryExpenseCard: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fca5a5',
+    backgroundColor: "#fef2f2",
+    borderColor: "#fca5a5",
   },
   summaryBalanceCard: {
-    backgroundColor: '#0f172a',
-    borderColor: '#0f172a',
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
     minHeight: 96,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -628,49 +695,49 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 13,
-    color: '#334155',
+    color: "#334155",
     marginBottom: 4,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   summaryValue: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#111111',
+    fontWeight: "700",
+    color: "#111111",
   },
   summaryBalanceLabel: {
-    color: '#cbd5e1',
+    color: "#cbd5e1",
   },
   summaryBalanceValue: {
     fontSize: 30,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   summaryBalancePositive: {
-    color: '#5eead4',
+    color: "#5eead4",
   },
   summaryBalanceNegative: {
-    color: '#fca5a5',
+    color: "#fca5a5",
   },
   incomeText: {
-    color: '#16a34a',
+    color: "#16a34a",
   },
   expenseText: {
-    color: '#dc2626',
+    color: "#dc2626",
   },
   transactionCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 12,
     paddingLeft: 14,
     elevation: 2,
     borderLeftWidth: 5,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
   },
   transactionCardIncome: {
-    borderLeftColor: '#16a34a',
+    borderLeftColor: "#16a34a",
   },
   transactionCardExpense: {
-    borderLeftColor: '#dc2626',
+    borderLeftColor: "#dc2626",
   },
   transactionHeader: {
     gap: 8,
@@ -679,8 +746,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   typeDot: {
@@ -689,45 +756,45 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   typeDotIncome: {
-    backgroundColor: '#22c55e',
+    backgroundColor: "#22c55e",
   },
   typeDotExpense: {
-    backgroundColor: '#ef4444',
+    backgroundColor: "#ef4444",
   },
   description: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#0f172a',
+    fontWeight: "600",
+    color: "#0f172a",
   },
   metaRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   metaText: {
     fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
+    color: "#64748b",
+    fontWeight: "500",
   },
   amountContainer: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   amount: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   incomeAmount: {
-    color: '#16a34a', // green-600
+    color: "#16a34a", // green-600
   },
   expenseAmount: {
-    color: '#dc2626', // red-600
+    color: "#dc2626", // red-600
   },
   actionButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f5f5f5',
+    borderTopColor: "#f5f5f5",
     paddingTop: 10,
   },
   actionButton: {
@@ -735,28 +802,28 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 10,
     borderRadius: 6,
-    alignItems: 'center',
+    alignItems: "center",
   },
   editButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
   },
   deleteButton: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: "#fef2f2",
   },
   actionButtonText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   deleteButtonText: {
-    color: '#dc2626',
+    color: "#dc2626",
   },
   emptyState: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     padding: 28,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
     gap: 10,
   },
   emptyStateIcon: {
@@ -764,28 +831,25 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
   },
   emptyStateIconMark: {
     fontSize: 18,
     lineHeight: 18,
-    color: '#64748b',
+    color: "#64748b",
   },
   emptyStateText: {
     fontSize: 15,
-    color: '#334155',
-    fontWeight: '600',
-    textAlign: 'center',
+    color: "#334155",
+    fontWeight: "600",
+    textAlign: "center",
   },
   emptyStateHint: {
     fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
+    color: "#64748b",
+    textAlign: "center",
   },
 });
-
-
-
