@@ -6,6 +6,7 @@ export interface Insight {
   description: string;
   type: 'positive' | 'warning' | 'negative';
   value?: string;
+  details?: Array<{ label: string; value: string }>;
 }
 
 const fallbackInsights: Insight[] = [
@@ -71,6 +72,17 @@ export function FinancialInsights({ insights }: { insights?: Insight[] }) {
                   {insight.value && <Text style={styles.insightValue}>{insight.value}</Text>}
                 </View>
                 <Text style={styles.insightDescription}>{insight.description}</Text>
+                {insight.details && insight.details.length > 0 && (
+                  <View style={styles.detailsContainer}>
+                    <Text style={styles.detailsTitle}>Detalhamento:</Text>
+                    {insight.details.map((detail, detailIndex) => (
+                      <View key={`${detail.label}-${detailIndex}`} style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>{detail.label}</Text>
+                        <Text style={styles.detailValue}>{detail.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           ))}
@@ -84,12 +96,13 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    margin: 8,
     elevation: 3,
+    minHeight: 260,
+    maxHeight: 340,
   },
   cardHeader: {
-    padding: 20,
-    paddingBottom: 16,
+    padding: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -104,16 +117,17 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   cardContent: {
-    padding: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   insightsContainer: {
-    gap: 16,
+    gap: 10,
   },
   insightItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#f0f0f0',
@@ -175,5 +189,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     lineHeight: 20,
+  },
+  detailsContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    gap: 6,
+  },
+  detailsTitle: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#334155',
+  },
+  detailValue: {
+    fontSize: 13,
+    color: '#0f172a',
+    fontWeight: '700',
   },
 });

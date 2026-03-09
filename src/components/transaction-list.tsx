@@ -167,6 +167,12 @@ export function TransactionList({
     return matchesSearch && matchesType && matchesCategory && matchesDate;
   });
 
+  const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
+    const aTime = parseDateValue(String(a?.date ?? ""))?.getTime() ?? 0;
+    const bTime = parseDateValue(String(b?.date ?? ""))?.getTime() ?? 0;
+    return bTime - aTime;
+  });
+
   const totalIncome = filteredTransactions
     .filter((transaction) => transaction.type === "income")
     .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
@@ -176,19 +182,19 @@ export function TransactionList({
   const balance = totalIncome - totalExpense;
 
   useEffect(() => {
-    onFilteredDataChange?.(filteredTransactions);
-  }, [filteredTransactions, onFilteredDataChange]);
+    onFilteredDataChange?.(sortedFilteredTransactions);
+  }, [sortedFilteredTransactions, onFilteredDataChange]);
 
   useEffect(() => {
     onExportContextChange?.({
-      filtered: filteredTransactions,
+      filtered: sortedFilteredTransactions,
       filterType,
       totalIncome,
       totalExpense,
       balance,
     });
   }, [
-    filteredTransactions,
+    sortedFilteredTransactions,
     filterType,
     totalIncome,
     totalExpense,
@@ -221,9 +227,10 @@ export function TransactionList({
   const formatDate = (dateString: string) => {
     const date = parseDateValue(dateString);
     if (!date) return dateString;
+    const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
-    return `${month}-${year}`;
+    return `${day}/${month}/${year}`;
   };
 
   const renderTransactionItem = ({ item }: { item: Transaction }) => (
@@ -482,7 +489,7 @@ export function TransactionList({
       </View>
 
       {/* Lista de transacoes */}
-      {filteredTransactions.length === 0 ? (
+      {sortedFilteredTransactions.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyStateIcon}>
             <Text style={styles.emptyStateIconMark}>-</Text>
@@ -496,7 +503,7 @@ export function TransactionList({
         </View>
       ) : (
         <FlatList
-          data={filteredTransactions}
+          data={sortedFilteredTransactions}
           renderItem={renderTransactionItem}
           keyExtractor={(item, index) =>
             `${item?.id || item?.date || "tx"}-${index}`

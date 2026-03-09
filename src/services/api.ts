@@ -59,6 +59,43 @@ export interface DashboardDTO {
   acoesRapidas: string[];
 }
 
+export interface CategoryBudgetDTO {
+  category: string;
+  amount: number;
+}
+
+export interface GoalDTO {
+  id?: string | number;
+  _id?: string | number;
+  nome?: string;
+  titulo?: string;
+  title?: string;
+  descricao?: string;
+  description?: string;
+  valorMeta?: number | string;
+  targetAmount?: number | string;
+  valorAtual?: number | string;
+  currentAmount?: number | string;
+  prazo?: string;
+  deadline?: string;
+  categoria?: string;
+  category?: string;
+}
+
+export interface CreateMetaDTO {
+  nome: string;
+  valorMeta: number;
+  descricao?: string;
+  prazo?: string;
+}
+
+export interface UpdateMetaDTO {
+  nome: string;
+  valorMeta: number;
+  descricao?: string;
+  prazo?: string;
+}
+
 /* =====================================================
    API SERVICE (INFRA HTTP)
 ===================================================== */
@@ -66,29 +103,35 @@ export interface DashboardDTO {
 export class ApiService {
   private baseUrl = "http://localhost:8080/api";
 
+  private typeSafeRequestOptions(options: RequestInit & { preserveSessionOnAuthError?: boolean }) {
+    const { preserveSessionOnAuthError, ...requestOptions } = options;
+    return { preserveSessionOnAuthError: Boolean(preserveSessionOnAuthError), requestOptions };
+  }
+
   /* ======================
      MÉTODO BASE (PRIVADO)
   ====================== */
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: (RequestInit & { preserveSessionOnAuthError?: boolean }) = {}
   ): Promise<T> {
+    const { preserveSessionOnAuthError, requestOptions } = this.typeSafeRequestOptions(options);
     const [plainToken, scopedToken] = await Promise.all([
       AsyncStorage.getItem("authToken"),
       AsyncStorage.getItem("@authToken"),
     ]);
     const authToken = plainToken || scopedToken;
-    const method = options.method ?? "GET";
+    const method = requestOptions.method ?? "GET";
     console.log(`[API] ${method} ${endpoint} auth token present:`, Boolean(authToken));
 
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
+        ...requestOptions,
         headers: {
           "Content-Type": "application/json",
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-          ...(options.headers || {}),
+          ...(requestOptions.headers || {}),
         },
       });
     } catch (error: any) {
@@ -103,6 +146,10 @@ export class ApiService {
       console.log(`[API] ${method} ${endpoint} error body:`, error);
 
       if (response.status === 401 || response.status === 403) {
+        if (preserveSessionOnAuthError) {
+          throw new Error(error?.message || `Erro ${response.status} em ${method} ${endpoint}`);
+        }
+
         await AsyncStorage.multiRemove([
           "authToken",
           "user",
@@ -293,7 +340,30 @@ export class ApiService {
     const extractList = (response: any) => {
       const payload = response?.data ?? response;
       if (Array.isArray(payload)) return payload;
-      return payload?.transacoes ?? payload?.transactions ?? payload?.content ?? payload?.items ?? [];
+
+      const directCandidates = [
+        payload?.transacoes,
+        payload?.transactions,
+        payload?.content,
+        payload?.items,
+      ];
+      for (const candidate of directCandidates) {
+        if (Array.isArray(candidate)) return candidate;
+      }
+
+      // Some backends split transactions by type.
+      const groupedCandidates = [
+        payload?.receitas,
+        payload?.despesas,
+        payload?.incomes,
+        payload?.expenses,
+      ];
+      const mergedGrouped = groupedCandidates.flatMap((group) =>
+        Array.isArray(group) ? group : [],
+      );
+      if (mergedGrouped.length > 0) return mergedGrouped;
+
+      return [];
     };
 
     try {
@@ -311,6 +381,80 @@ export class ApiService {
       return extractList(response);
     }
   }
+
+  async getCategoryBudgets(): Promise<CategoryBudgetDTO[]> {
+    const extractList = (response: any): CategoryBudgetDTO[] => {
+      const payload = response?.data ?? response;
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.orcamentos)
+          ? payload.orcamentos
+          : Array.isArray(payload?.budgets)
+            ? payload.budgets
+            : Array.isArray(payload?.items)
+              ? payload.items
+              : [];
+
+      return list
+        .map((item: any) => ({
+          category: String(item?.category ?? item?.categoria ?? item?.nomeCategoria ?? "").trim(),
+          amount: Number(item?.amount ?? item?.valor ?? item?.budget ?? 0),
+        }))
+        .filter((item: CategoryBudgetDTO) => item.category.length > 0 && Number.isFinite(item.amount));
+    };
+
+    const endpoints = ["/orcamentos", "/budgets", "/orcamentos/categorias"];
+    let lastError: Error | null = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await this.request<any>(endpoint);
+        return extractList(response);
+      } catch (error: any) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    if (lastError) {
+      console.log("[API] Nenhum endpoint de orcamento disponivel:", lastError.message);
+    }
+    return [];
+  }
+
+  async getMetas(): Promise<GoalDTO[]> {
+    const response = await this.request<any>("/metas", { preserveSessionOnAuthError: true });
+    const payload = response?.data ?? response;
+
+    if (Array.isArray(payload)) return payload as GoalDTO[];
+    if (Array.isArray(payload?.metas)) return payload.metas as GoalDTO[];
+    if (Array.isArray(payload?.items)) return payload.items as GoalDTO[];
+
+    return [];
+  }
+
+  async createMeta(dto: CreateMetaDTO): Promise<GoalDTO> {
+    return this.request<GoalDTO>("/metas", {
+      method: "POST",
+      body: JSON.stringify(dto),
+      preserveSessionOnAuthError: true,
+    });
+  }
+
+  async updateMeta(id: string, dto: UpdateMetaDTO): Promise<GoalDTO> {
+    return this.request<GoalDTO>(`/metas/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(dto),
+      preserveSessionOnAuthError: true,
+    });
+  }
+
+  async deleteMeta(id: string): Promise<void> {
+    return this.request<void>(`/metas/${id}`, {
+      method: "DELETE",
+      preserveSessionOnAuthError: true,
+    });
+  }
+
   async sendChatIA(message: string): Promise<AIResponse> {
   return this.request<AIResponse>("/chat-ia", {
     method: "POST",

@@ -23,8 +23,8 @@ export function IncomeExpenseChart({ data }: { data?: MonthlyChartPoint[] }) {
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
 
-  const chartWidth = Math.min(width - 64, 650);
-  const chartHeight = 320;
+  const chartWidth = Math.min(width - 64, 560);
+  const chartHeight = 260;
   const maxValue = Math.max(1, ...monthlyData.flatMap(item => [item.receitas, item.despesas]));
 
   const formatCurrency = (amount: number) => {
@@ -33,18 +33,18 @@ export function IncomeExpenseChart({ data }: { data?: MonthlyChartPoint[] }) {
     });
   };
 
-  const barWidth = isLargeScreen ? 24 : 20;
-  const spacing = 10;
+  const barWidth = isLargeScreen ? 20 : 16;
+  const spacing = 8;
   const groupWidth = barWidth * 2 + spacing;
   const availableWidth = chartWidth - 80;
   const groupSpacing = availableWidth / Math.max(1, monthlyData.length) - groupWidth;
 
   return (
-    <Card>
+    <Card style={styles.card} maxWidth={isLargeScreen ? 600 : 0}>
       <CardHeader>
         <CardTitle>Receitas vs Despesas</CardTitle>
         <CardDescription>
-          Comparacao mensal dos ultimos 6 meses
+          Comparacao mensal de janeiro a junho
         </CardDescription>
       </CardHeader>
 
@@ -146,18 +146,18 @@ export function IncomeExpenseChart({ data }: { data?: MonthlyChartPoint[] }) {
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    minHeight: 540,
+    minHeight: 430,
   },
   chartContainer: {
-    padding: 16,
+    padding: 10,
     alignItems: 'center',
-    minWidth: 350,
+    minWidth: 300,
   },
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
-    marginTop: 16,
+    gap: 14,
+    marginTop: 10,
   },
   legendItem: {
     flexDirection: 'row',
@@ -170,31 +170,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   legendText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#374151',
   },
   dataTable: {
-    paddingTop: 16,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
-    minWidth: 350,
+    minWidth: 300,
   },
   dataTableTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   dataRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
   monthText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: '#374151',
     minWidth: 40,
@@ -206,17 +206,17 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   incomeText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#16a34a',
     fontWeight: '500',
   },
   expenseText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#dc2626',
     fontWeight: '500',
   },
   balanceText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   positiveBalance: {
@@ -226,3 +226,8 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   },
 });
+
+
+
+
+

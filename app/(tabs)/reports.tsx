@@ -4,6 +4,7 @@ import { ExpenseChart, ExpenseData } from '@/components/expense-chart';
 import { FinancialInsights, Insight } from '@/components/financial-insights';
 import { IncomeExpenseChart, MonthlyChartPoint } from '@/components/income-expense-chart';
 import { MonthlySummary, MonthlySummaryData } from '@/components/monthly-summary';
+import analisarFinancas from '@/services/financial-ai';
 import { apiService } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,47 +27,63 @@ interface ReportTransaction {
   date: string;
 }
 
+type EstadoFinanceiro = Record<string, number>;
+type GroupKey = 'moradia' | 'alimentacao' | 'transporte' | 'saude' | 'lazer' | 'outros';
+
 const DASHBOARD_GRADIENT = ['#000000', '#073D33', '#107A65', '#20F4CA'] as const;
-const CATEGORY_ORDER = ['Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Lazer'] as const;
+const CATEGORY_GROUPS = {
+  Moradia: 'moradia',
 
-const getBudgetRulesByIncome = (income: number) => {
-  if (income <= 1800) {
-    return {
-      Moradia: 0.40,
-      Alimentação: 0.30,
-      Transporte: 0.10,
-      Saúde: 0.10,
-      Lazer: 0.10,
-    } as const;
-  }
+  Supermercado: 'alimentacao',
+  Restaurante: 'alimentacao',
+  Padaria: 'alimentacao',
+  Açougue: 'alimentacao',
+  Delivery: 'alimentacao',
 
-  if (income <= 4000) {
-    return {
-      Moradia: 0.35,
-      Alimentação: 0.25,
-      Transporte: 0.15,
-      Saúde: 0.10,
-      Lazer: 0.15,
-    } as const;
-  }
+  Combustível: 'transporte',
+  Uber: 'transporte',
+  'Transporte público': 'transporte',
 
-  if (income <= 8000) {
-    return {
-      Moradia: 0.30,
-      Alimentação: 0.20,
-      Transporte: 0.20,
-      Saúde: 0.10,
-      Lazer: 0.20,
-    } as const;
-  }
+  Medicamentos: 'saude',
+  'Plano de saúde': 'saude',
+  Academia: 'saude',
 
-  return {
-    Moradia: 0.25,
-    Alimentação: 0.15,
-    Transporte: 0.20,
-    Saúde: 0.10,
-    Lazer: 0.30,
-  } as const;
+  Streaming: 'lazer',
+  Cinema: 'lazer',
+  Viagens: 'lazer',
+
+  Compras: 'outros',
+  Educação: 'outros',
+  Pets: 'outros',
+  Assinaturas: 'outros',
+  Tecnologia: 'outros',
+} as const;
+
+const GROUP_ORDER: GroupKey[] = [
+  'moradia',
+  'alimentacao',
+  'transporte',
+  'saude',
+  'lazer',
+  'outros',
+];
+
+const GROUP_LABEL: Record<GroupKey, string> = {
+  moradia: 'Moradia',
+  alimentacao: 'Alimentação',
+  transporte: 'Transporte',
+  saude: 'Saúde',
+  lazer: 'Lazer',
+  outros: 'Outros',
+};
+
+const MOCK_BUDGET_BY_GROUP: Record<GroupKey, number> = {
+  moradia: 1500,
+  alimentacao: 600,
+  transporte: 400,
+  saude: 350,
+  lazer: 300,
+  outros: 250,
 };
 
 export default function ReportsPage() {
@@ -142,6 +159,16 @@ export default function ReportsPage() {
       .trim()
       .toLowerCase();
 
+  const resolveGroupByCategory = (category: string): GroupKey => {
+    const normalizedInput = normalizeCategoryKey(category);
+    for (const [rawCategory, group] of Object.entries(CATEGORY_GROUPS)) {
+      if (normalizeCategoryKey(rawCategory) === normalizedInput) {
+        return group;
+      }
+    }
+    return 'outros';
+  };
+
   const parseMonthYear = (value: string) => {
     const normalized = String(value ?? '').trim();
     const brMatch = normalized.match(/^(\d{2})-(\d{4})$/);
@@ -160,6 +187,9 @@ export default function ReportsPage() {
       labelDate: new Date(year, month - 1, 1),
     };
   };
+
+  const formatCurrency = (amount: number) =>
+    Number(amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
   const checkAuthentication = async () => {
     try {
@@ -202,7 +232,12 @@ export default function ReportsPage() {
   const loadReportData = async (monthReference: string) => {
     try {
       setReportLoading(true);
-      const data = await apiService.getTransactions();
+      const data = await Promise.race<any[]>([
+        apiService.getTransactions(),
+        new Promise<any[]>((resolve) => {
+          setTimeout(() => resolve([]), 8000);
+        }),
+      ]);
       const normalized: ReportTransaction[] = (data ?? []).map((t: any, index: number) => ({
         id: String(t?.id ?? t?._id ?? index),
         description: String(t?.description ?? t?.descricao ?? ''),
@@ -241,27 +276,29 @@ export default function ReportsPage() {
           expensesByCategoryMap.set(transaction.category, current + transaction.amount);
         });
 
-      const budgetRules = getBudgetRulesByIncome(totalIncome);
-      const expensesByCategory = CATEGORY_ORDER.map((category) => {
+      const estadoFinanceiro = Array.from(expensesByCategoryMap.entries()).reduce<EstadoFinanceiro>((acc, [category, amount]) => {
+        acc[category] = amount;
+        return acc;
+      }, {});
+      const sugestoesIA = analisarFinancas(estadoFinanceiro, totalIncome, totalExpenses);
+
+      const expensesByCategory = GROUP_ORDER.map((group) => {
         const amount = Array.from(expensesByCategoryMap.entries()).reduce((acc, [rawCategory, rawAmount]) => {
-          if (normalizeCategoryKey(rawCategory) === normalizeCategoryKey(category)) {
-            return acc + rawAmount;
-          }
-          return acc;
+          if (resolveGroupByCategory(rawCategory) !== group) return acc;
+          return acc + rawAmount;
         }, 0);
 
         return {
-          category,
+          category: GROUP_LABEL[group],
           amount,
-          budget: totalIncome * budgetRules[category],
+          budget: MOCK_BUDGET_BY_GROUP[group],
         };
       });
 
       const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      const chartData: MonthlyChartPoint[] = Array.from({ length: 6 }).map((_, offset) => {
-        const date = new Date(currentYear, currentMonth - (5 - offset), 1);
-        const month = date.getMonth();
-        const year = date.getFullYear();
+      // Fixed window from January to June for the selected year.
+      const chartData: MonthlyChartPoint[] = Array.from({ length: 6 }).map((_, month) => {
+        const year = currentYear;
         const monthTransactions = normalized.filter((transaction) => {
           const transactionDate = parseTransactionDate(transaction.date);
           if (!transactionDate) return false;
@@ -281,6 +318,7 @@ export default function ReportsPage() {
       const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6'];
       const chartExpenses: ExpenseData[] = expensesByCategory.map((item, index) => ({
         category: item.category,
+        budget: item.budget,
         amount: item.amount,
         color: palette[index % palette.length],
       }));
@@ -314,6 +352,36 @@ export default function ReportsPage() {
         });
       }
 
+      if (sugestoesIA.length > 0) {
+        sugestoesIA.slice(0, 3).forEach((s) => {
+          const suggestedGroup = resolveGroupByCategory(s.categoria);
+          const detailItems = Array.from(expensesByCategoryMap.entries())
+            .filter(([rawCategory, rawAmount]) =>
+              resolveGroupByCategory(rawCategory) === suggestedGroup && rawAmount > 0
+            )
+            .sort((a, b) => b[1] - a[1])
+            .map(([rawCategory, rawAmount]) => ({
+              label: rawCategory,
+              value: `R$ ${formatCurrency(rawAmount)}`,
+            }));
+
+          generatedInsights.push({
+            title: 'Sugestão da IA',
+            description: `Reduza ${s.categoria} em ${s.percentualReducao}%`,
+            type: 'warning',
+            value: `Economia estimada: R$ ${s.economia.toFixed(2)}`,
+            details: detailItems,
+          });
+        });
+      } else {
+        generatedInsights.push({
+          title: 'Resultado da IA',
+          description: 'Sem ajustes sugeridos para este periodo.',
+          type: 'positive',
+          value: 'Orcamento sob controle',
+        });
+      }
+
       setMonthlySummaryData({
         totalIncome,
         totalExpenses,
@@ -321,6 +389,7 @@ export default function ReportsPage() {
         savingsGoal: Math.max(totalIncome * 0.2, 1),
         monthLabel: baseDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
         expensesByCategory,
+        aiSuggestions: sugestoesIA.slice(0, 3),
       });
       setMonthlyChartData(chartData);
       setExpenseChartData(chartExpenses);
@@ -384,7 +453,7 @@ export default function ReportsPage() {
                     styles.chartsGrid,
                     {
                       flexDirection: isLargeScreen ? 'row' : 'column',
-                      gap: isLargeScreen ? 20 : 16
+                      gap: isLargeScreen ? 4 : 16
                     }
                   ]}
                 >
@@ -392,8 +461,10 @@ export default function ReportsPage() {
                     style={[
                       styles.chartContainer,
                       {
-                        flex: isLargeScreen ? 1 : undefined,
-                        minWidth: isLargeScreen ? 0 : '100%'
+                        flex: 0,
+                        width: isLargeScreen ? 600 : '100%',
+                        minWidth: isLargeScreen ? 600 : '100%',
+                        maxWidth: isLargeScreen ? 600 : '100%',
                       }
                     ]}
                   >
@@ -403,8 +474,10 @@ export default function ReportsPage() {
                     style={[
                       styles.chartContainer,
                       {
-                        flex: isLargeScreen ? 1 : undefined,
-                        minWidth: isLargeScreen ? 0 : '100%'
+                        flex: 0,
+                        width: isLargeScreen ? 600 : '100%',
+                        minWidth: isLargeScreen ? 600 : '100%',
+                        maxWidth: isLargeScreen ? 600 : '100%',
                       }
                     ]}
                   >
@@ -412,8 +485,28 @@ export default function ReportsPage() {
                   </View>
                 </View>
 
-                <View style={styles.section}>
-                  <FinancialInsights insights={insightsData} />
+                <View
+                  style={[
+                    styles.bottomGrid,
+                    {
+                      flexDirection: isLargeScreen ? 'row' : 'column',
+                      gap: isLargeScreen ? 20 : 16,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.chartContainer,
+                      styles.insightsColumn,
+                      {
+                        flex: isLargeScreen ? 1 : undefined,
+                        minWidth: isLargeScreen ? 0 : '100%',
+                      },
+                    ]}
+                  >
+                    <FinancialInsights insights={insightsData} />
+                  </View>
+                  {isLargeScreen && <View style={[styles.chartContainer, styles.futureColumnPlaceholder]} />}
                 </View>
               </View>
             </ScrollView>
@@ -511,10 +604,26 @@ const styles = StyleSheet.create({
   },
   chartsGrid: {
     marginBottom: 24,
-    alignItems: 'stretch'
+    alignItems: 'stretch',
+    paddingHorizontal: 8,
+  },
+  bottomGrid: {
+    marginBottom: 24,
+    alignItems: 'stretch',
+    paddingHorizontal: 8,
   },
   chartContainer: {
     flex: 1,
-    minWidth: 350
+    minWidth: 280
+  },
+  insightsColumn: {
+    alignSelf: 'flex-start',
+  },
+  futureColumnPlaceholder: {
+    minHeight: 260,
   },
 });
+
+
+
+

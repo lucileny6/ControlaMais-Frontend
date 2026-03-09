@@ -29,6 +29,16 @@ export function DashboardNav() {
       icon: Goal,
     },
     {
+      title: "Assistente",
+      href: "/(tabs)/assistant-tools",
+      icon: Bot,
+    },
+    {
+      title: "Economia",
+      href: "/(tabs)/savings-tools",
+      icon: BarChart3,
+    },
+    {
       title: "Chat IA",
       href: "/(tabs)/chat",
       icon: Bot,

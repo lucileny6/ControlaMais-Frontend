@@ -261,15 +261,35 @@ export default function TransactionsPage() {
         backendId: ids.primaryId,
         id: "",
         deleteCandidates: ids.candidates,
-        description: String(t?.description ?? t?.descricao ?? ""),
-        amount: Number(t?.amount ?? t?.valor ?? t?.value ?? 0),
+        description: String(
+          t?.description ??
+            t?.descricao ??
+            t?.nome ??
+            t?.titulo ??
+            t?.historico ??
+            "Sem descricao",
+        ),
+        amount: Number(t?.amount ?? t?.valor ?? t?.value ?? t?.preco ?? 0),
         type: (() => {
           const rawType = String(t?.type ?? t?.tipo ?? "").toLowerCase().trim();
-          if (rawType === "income" || rawType === "icome" || rawType === "receita") return "income";
+          if (
+            rawType === "income" ||
+            rawType === "icome" ||
+            rawType === "receita" ||
+            rawType === "entrada"
+          ) return "income";
           return "expense";
         })(),
         category: String(t?.category ?? t?.categoria ?? "Sem categoria"),
-        date: String(t?.date ?? t?.data ?? new Date().toISOString()),
+        date: String(
+          t?.date ??
+            t?.data ??
+            t?.dataTransacao ??
+            t?.dataDespesa ??
+            t?.dataReceita ??
+            t?.createdAt ??
+            new Date().toISOString(),
+        ),
         notes: t?.notes ?? t?.observacao ?? undefined,
       };
     }).map((transaction, index) => ({
@@ -277,10 +297,12 @@ export default function TransactionsPage() {
         id: `${transaction.type}-${transaction.backendId}-${index}`,
       }));
       setTransactions(normalized);
+      return normalized;
     } catch (error: any) {
       setTransactions([]);
       const message = String(error?.message ?? "Nao foi possivel carregar transacoes");
       showMessage("Erro", `Nao foi possivel carregar transacoes: ${message}`);
+      return [];
     }
   };
 
@@ -316,6 +338,42 @@ export default function TransactionsPage() {
         observacao: data.notes,
       };
 
+      const normalizeComparableDate = (value: string) => {
+        const raw = String(value ?? "").trim();
+        if (!raw) return "";
+        const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
+        const brSlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        const brDash = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+        if (isoDate.test(raw)) return raw;
+        if (brSlash.test(raw)) {
+          const [, day, month, year] = raw.match(brSlash)!;
+          return `${year}-${month}-${day}`;
+        }
+        if (brDash.test(raw)) {
+          const [, day, month, year] = raw.match(brDash)!;
+          return `${year}-${month}-${day}`;
+        }
+
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) return "";
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      const normalizeText = (value: string) => String(value ?? "").trim().toLowerCase();
+      const justSavedMatches = (transaction: Transaction) => {
+        return (
+          transaction.type === data.type &&
+          Math.abs(Number(transaction.amount ?? 0) - Number(data.amount ?? 0)) < 0.001 &&
+          normalizeText(transaction.description) === normalizeText(data.description) &&
+          normalizeText(transaction.category) === normalizeText(data.category) &&
+          normalizeComparableDate(transaction.date) === payload.data
+        );
+      };
+
       if (editingTransaction) {
         let updated = false;
         let lastError: unknown = null;
@@ -346,8 +404,41 @@ export default function TransactionsPage() {
         });
       }
 
+      let latestTransactions = await loadTransactions();
+
+      if (!editingTransaction) {
+        let foundSavedTransaction = latestTransactions.some(justSavedMatches);
+
+        // Some backends delay expense aggregation; retry quickly before requiring manual refresh.
+        if (!foundSavedTransaction && data.type === "expense") {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 450));
+            latestTransactions = await loadTransactions();
+            foundSavedTransaction = latestTransactions.some(justSavedMatches);
+            if (foundSavedTransaction) break;
+          }
+        }
+
+        if (!foundSavedTransaction) {
+          const fallbackId = `tx-local-${Date.now()}`;
+          setTransactions((previous) => [
+            {
+              id: fallbackId,
+              backendId: fallbackId,
+              deleteCandidates: [fallbackId],
+              description: data.description,
+              amount: data.amount,
+              type: data.type,
+              category: data.category,
+              date: payload.data,
+              notes: data.notes,
+            },
+            ...previous,
+          ]);
+        }
+      }
+
       showMessage("Sucesso", editingTransaction ? "Transacao atualizada com sucesso!" : "Transacao cadastrada com sucesso!");
-      await loadTransactions();
       resetModalState();
     } catch (error: any) {
       const message = String(error?.message ?? "Erro ao salvar transacao");
@@ -916,4 +1007,3 @@ const styles = StyleSheet.create({
     color: "#ECFEFF",
   },
 });
-

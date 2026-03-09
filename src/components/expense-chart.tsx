@@ -5,6 +5,7 @@ import Svg, { Circle, G } from 'react-native-svg';
 
 export interface ExpenseData {
   category: string;
+  budget: number;
   amount: number;
   color: string;
 }
@@ -15,7 +16,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
 
-  const chartSize = isLargeScreen ? 200 : 180;
+  const chartSize = isLargeScreen ? 170 : 150;
   const radius = chartSize * 0.4;
   const center = chartSize / 2;
 
@@ -28,10 +29,10 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
   };
 
   return (
-    <Card style={styles.card}>
+    <Card style={styles.card} maxWidth={isLargeScreen ? 600 : 0}>
       <CardHeader>
-        <CardTitle>Despesas por Categoria</CardTitle>
-        <CardDescription>Distribuicao dos seus gastos este mes</CardDescription>
+        <CardTitle>Despesas e Orcamento por Categoria</CardTitle>
+        <CardDescription>Comparativo entre planejamento e gastos do mes</CardDescription>
       </CardHeader>
 
       <CardContent style={styles.cardContent}>
@@ -55,7 +56,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
                           cy={center}
                           r={radius}
                           stroke={item.color}
-                          strokeWidth={isLargeScreen ? 32 : 28}
+                          strokeWidth={isLargeScreen ? 24 : 20}
                           strokeDasharray={strokeDasharray}
                           strokeDashoffset={-currentAngle * circumference / 360}
                           fill="transparent"
@@ -93,6 +94,40 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
                 );
               })}
             </View>
+
+            <View style={styles.tableSection}>
+              <Text style={styles.tableTitle}>Resumo por categoria</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.table}>
+                  <View style={[styles.tableRow, styles.tableHeaderRow]}>
+                    <Text style={[styles.tableCell, styles.headerCell, styles.categoryColumn]}>Categoria</Text>
+                    <Text style={[styles.tableCell, styles.headerCell, styles.valueColumn]}>Orcamento</Text>
+                    <Text style={[styles.tableCell, styles.headerCell, styles.valueColumn]}>Despesa</Text>
+                  </View>
+                  {expenseData.map((item, index) => (
+                    <View key={`table-${item.category}-${index}`} style={styles.tableRow}>
+                      <Text style={[styles.tableCell, styles.categoryColumn]}>{item.category}</Text>
+                      <Text style={[styles.tableCell, styles.valueColumn]}>
+                        {item.budget > 0 ? `R$ ${formatCurrency(item.budget)}` : '-'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tableCell,
+                          styles.valueColumn,
+                          item.budget > 0
+                            ? item.amount > item.budget
+                              ? styles.expenseOverBudget
+                              : styles.expenseWithinBudget
+                            : undefined,
+                        ]}
+                      >
+                        R$ {formatCurrency(item.amount)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
           </ScrollView>
         ) : (
           <View style={styles.emptyState}>
@@ -107,7 +142,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    minHeight: 480,
+    minHeight: 430,
   },
   cardContent: {
     flex: 1
@@ -115,13 +150,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 8
+    paddingVertical: 4
   },
   chartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 240,
-    marginBottom: 24,
+    height: 200,
+    marginBottom: 14,
     position: 'relative',
   },
   svg: {
@@ -134,23 +169,23 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   totalLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666666',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   totalAmount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#000000',
   },
   legend: {
-    gap: 12,
+    gap: 8,
   },
   legendItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   legendLeft: {
     flexDirection: 'row',
@@ -164,7 +199,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#000000',
   },
   legendRight: {
@@ -173,7 +208,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   amountText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#000000',
   },
@@ -191,4 +226,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
   },
+  tableSection: {
+    marginTop: 12,
+    gap: 8,
+  },
+  tableTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  table: {
+    minWidth: 420,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tableHeaderRow: {
+    backgroundColor: '#f8fafc',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tableCell: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 12,
+    color: '#111827',
+  },
+  headerCell: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  categoryColumn: {
+    minWidth: 150,
+    flex: 2,
+  },
+  valueColumn: {
+    minWidth: 130,
+    flex: 1.5,
+  },
+  expenseOverBudget: {
+    color: '#dc2626',
+    fontWeight: '700',
+  },
+  expenseWithinBudget: {
+    color: '#16a34a',
+    fontWeight: '700',
+  },
 });
+
+
+
+
+
