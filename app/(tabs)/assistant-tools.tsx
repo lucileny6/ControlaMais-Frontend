@@ -5,31 +5,21 @@ import { PurchaseSimulator } from '@/components/purchase-simulator';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-interface User {
-  name?: string;
-  email?: string;
-}
-
-const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
 
 export default function AssistantToolsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
 
-  useEffect(() => {
-    checkAuthentication();
-  }, []);
-
-  const checkAuthentication = async () => {
+  const checkAuthentication = useCallback(async () => {
     try {
       const [authToken, legacyAuthToken, storedUser, legacyStoredUser] = await Promise.all([
         AsyncStorage.getItem('authToken'),
@@ -45,18 +35,18 @@ export default function AssistantToolsPage() {
         return;
       }
 
-      if (userFromStorage) {
-        setUser(JSON.parse(userFromStorage));
-      } else {
-        setUser(null);
-      }
+      void userFromStorage;
     } catch (error) {
       console.error('Erro ao verificar autenticacao:', error);
       router.replace('/login');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    checkAuthentication();
+  }, [checkAuthentication]);
 
   if (isLoading) {
     return (
@@ -129,8 +119,8 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 256,
     borderRightWidth: 1,
-    borderRightColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
+    borderRightColor: 'rgba(148, 163, 184, 0.16)',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
   sidebarContent: {
     paddingVertical: 24,
@@ -143,23 +133,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 16,
+    padding: 20,
   },
   pageContent: {
     flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.74)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(191, 219, 254, 0.22)',
+    padding: 24,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 2,
   },
   header: {
     marginBottom: 24,
-    gap: 6,
+    gap: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.8,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: 15,
+    color: '#64748b',
+    maxWidth: 620,
+    lineHeight: 22,
   },
   toolsGrid: {
     gap: 20,
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
   toolItem: {
     flex: 1,
     minHeight: 200,
-    minWidth: 300,
+    minWidth: 320,
   },
   loadingContainer: {
     flex: 1,

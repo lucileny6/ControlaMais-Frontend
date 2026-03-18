@@ -57,7 +57,8 @@ export function ChatMessage({ message, isUser, timestamp }: ChatMessageProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
     gap: 12,
   },
   userContainer: {
@@ -67,27 +68,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   userAvatar: {
-    backgroundColor: '#000000', // bg-primary
+    backgroundColor: '#10233f',
   },
   aiAvatar: {
-    backgroundColor: '#f5f5f5', // bg-secondary
+    backgroundColor: '#e7eef4',
   },
   avatarText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#ffffff', // text-primary-foreground para user
+    color: '#ffffff',
   },
   messageContent: {
     flexDirection: 'column',
-    maxWidth: '80%',
+    maxWidth: '78%',
     gap: 4,
   },
   userContent: {
@@ -97,28 +98,32 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
-    borderRadius: 12,
+    borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    borderWidth: 1,
   },
   userBubble: {
-    backgroundColor: '#000000', // bg-primary
+    backgroundColor: '#10233f',
+    borderColor: 'rgba(16, 35, 63, 0.9)',
   },
   aiBubble: {
-    backgroundColor: '#f5f5f5', // bg-muted
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: 'rgba(197, 210, 223, 0.45)',
   },
   messageText: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
   },
   userMessageText: {
-    color: '#ffffff', // text-primary-foreground
+    color: '#ffffff',
   },
   aiMessageText: {
-    color: '#666666', // text-muted-foreground
+    color: '#31445c',
   },
   timestamp: {
     fontSize: 12,
-    color: '#999999', // text-muted-foreground
+    color: '#7b8b9f',
+    paddingHorizontal: 4,
   },
 });

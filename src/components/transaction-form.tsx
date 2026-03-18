@@ -21,6 +21,7 @@ export interface TransactionFormData {
   category: string;
   date: string;
   notes?: string;
+  recorrente: boolean;
 }
 
 interface TransactionFormProps {
@@ -95,6 +96,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     category: initialData?.category || "",
     date: formatDateForDisplay(initialData?.date),
     notes: initialData?.notes || "",
+    recorrente: initialData?.recorrente ?? false,
   });
 
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -108,6 +110,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       category: initialData?.category || "",
       date: formatDateForDisplay(initialData?.date),
       notes: initialData?.notes || "",
+      recorrente: initialData?.recorrente ?? false,
     });
   }, [initialData]);
 
@@ -146,6 +149,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       category: formData.category,
       date: formData.date,
       notes: formData.notes,
+      recorrente: formData.recorrente,
     });
   };
 
@@ -219,6 +223,35 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             value={formData.date}
             onChangeText={(v) => setFormData((p) => ({ ...p, date: v }))}
           />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Recorrencia</Text>
+          <TouchableOpacity
+            style={[
+              styles.recurringToggle,
+              formData.recorrente && styles.recurringToggleActive,
+            ]}
+            onPress={() =>
+              setFormData((previous) => ({
+                ...previous,
+                recorrente: !previous.recorrente,
+              }))
+            }
+          >
+            <View
+              style={[
+                styles.recurringIndicator,
+                formData.recorrente && styles.recurringIndicatorActive,
+              ]}
+            />
+            <View style={styles.recurringTextBlock}>
+              <Text style={styles.recurringTitle}>Transacao recorrente</Text>
+              <Text style={styles.recurringDescription}>
+                Marque se essa receita ou despesa acontece todo mes.
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* SALVAR */}
@@ -346,6 +379,47 @@ const styles = StyleSheet.create({
   },
   selectValue: {
     fontSize: 14,
+  },
+  recurringToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+  },
+  recurringToggleActive: {
+    borderColor: "#0B6E5B",
+    backgroundColor: "#ecfdf5",
+  },
+  recurringIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#9ca3af",
+    backgroundColor: "#ffffff",
+  },
+  recurringIndicatorActive: {
+    borderColor: "#0B6E5B",
+    backgroundColor: "#0B6E5B",
+  },
+  recurringTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  recurringTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  recurringDescription: {
+    fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 17,
   },
   selectArrow: {
     fontSize: 11,

@@ -256,14 +256,14 @@ export function DashboardHeader() {
 const styles = StyleSheet.create({
   header: {
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e5e5",
-    backgroundColor: "#ffffff",
+    borderBottomColor: "rgba(197, 210, 223, 0.45)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
   },
   container: {
     flexDirection: "row",
     alignItems: "center",
-    height: 64,
-    paddingHorizontal: 16,
+    height: 72,
+    paddingHorizontal: 22,
   },
   logoContainer: {
     flexDirection: "row",
@@ -272,13 +272,13 @@ const styles = StyleSheet.create({
   },
   logoText: {
     fontSize: 34,
-    fontWeight: "700",
-    color: "#000000",
+    fontWeight: "800",
+    color: "#10233f",
   },
   logoPlus: {
     fontSize: 34,
-    fontWeight: "700",
-    color: "#13b8a0",
+    fontWeight: "800",
+    color: "#15a087",
   },
   avatarContainer: {
     marginLeft: "auto",
@@ -287,14 +287,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   avatarButton: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: "hidden",
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 20,
-    backgroundColor: "#000000",
+    width: 40,
+    height: 40,
+    borderRadius: 22,
+    backgroundColor: "#10233f",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -305,12 +305,14 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "rgba(15, 23, 42, 0.08)",
   },
   dropdownContent: {
     width: 220,
     backgroundColor: "#ffffff",
-    borderRadius: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(197, 210, 223, 0.48)",
     elevation: 5,
     paddingVertical: 8,
   },
@@ -321,16 +323,16 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#000000",
+    fontWeight: "700",
+    color: "#10233f",
   },
   menuSubtitle: {
     fontSize: 12,
-    color: "#666666",
+    color: "#718198",
   },
   menuSeparator: {
     height: 1,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: "rgba(203, 213, 225, 0.5)",
     marginVertical: 4,
   },
   menuItem: {
@@ -339,6 +341,6 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 14,
-    color: "#000000",
+    color: "#10233f",
   },
 });

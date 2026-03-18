@@ -68,8 +68,8 @@ export function DashboardNav() {
 
 const styles = StyleSheet.create({
   navContainer: {
-    paddingHorizontal: 10,
-    gap: 2,
+    paddingHorizontal: 12,
+    gap: 4,
   },
   navButton: {
     flexDirection: "row",
@@ -77,12 +77,14 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 14,
     marginVertical: 1,
     justifyContent: "flex-start",
   },
   activeButton: {
-    backgroundColor: "#eff2f6",
+    backgroundColor: "rgba(226, 236, 244, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(197, 210, 223, 0.52)",
   },
   inactiveButton: {
     backgroundColor: "transparent",
@@ -93,9 +95,10 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
   activeText: {
-    color: "#0f172a",
+    color: "#10233f",
+    fontWeight: "700",
   },
   inactiveText: {
-    color: "#4b5563",
+    color: "#5f7087",
   },
 });

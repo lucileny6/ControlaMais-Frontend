@@ -136,7 +136,7 @@ function mergeUsers(primary: User | null, fallback: User | null): User | null {
   };
 }
 
-const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
 
 export default function PageDashboard() {
   const router = useRouter();
@@ -291,8 +291,8 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 246,
     borderRightWidth: 1,
-    borderRightColor: "#d9dde5",
-    backgroundColor: "#f8f8fa",
+    borderRightColor: "rgba(148, 163, 184, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
   },
   sidebarContent: {
     paddingVertical: 24,
@@ -305,35 +305,49 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 24,
     width: "100%",
-    maxWidth: 1330,
+    maxWidth: 1360,
     alignSelf: "center",
   },
   dashboardContent: {
     flex: 1,
     gap: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.92)",
+    borderRadius: 30,
+    padding: 24,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.07,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 5,
   },
   welcomeSection: {
     marginBottom: 2,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148, 163, 184, 0.14)",
   },
   title: {
-    fontSize: 38,
-    fontWeight: "700",
-    color: "#ffffff",
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#10233f",
+    letterSpacing: -0.9,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "500",
-    color: "#ffffff",
-    marginTop: 4,
+    color: "#5f7087",
+    marginTop: 7,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 18,
-    marginTop: 2,
+    gap: 16,
+    marginTop: 4,
   },
   bottomGridDesktop: {
     flexWrap: "nowrap",
@@ -359,6 +373,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: "#666666",
+    color: "#64748b",
   },
 });

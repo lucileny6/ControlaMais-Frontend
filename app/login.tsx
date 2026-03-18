@@ -14,7 +14,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BrandColors } from "../constants/theme";
 import { apiService } from "../src/services/api";
 
 type LoginResponse = {
@@ -125,7 +124,7 @@ export default function Login() {
 
   return (
     <LinearGradient
-      colors={["#020305", "#03100E", "#052A24", "#11B99C", "#29E9CF"]}
+      colors={["#0B1624", "#12354A", "#178A86", "#7FE7D0"]}
       locations={[0, 0.3, 0.57, 0.82, 1]}
       style={styles.gradient}
     >
@@ -218,52 +217,58 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-    maxWidth: 400,
+    maxWidth: 420,
     width: "100%",
     alignSelf: "center",
   },
   card: {
     width: 400,
     maxWidth: "100%",
-    backgroundColor: "#FFFFFF",
-    borderColor: "rgba(56, 255, 226, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: "rgba(214, 252, 244, 0.4)",
     borderWidth: 1,
+    borderRadius: 24,
+    shadowColor: "#0B1624",
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
   },
   title: {
     fontSize: 32,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 8,
-    color: "#000000",
+    color: "#10233F",
   },
   subtitle: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 32,
-    color: "#021416",
+    color: "#4D6176",
   },
   input: {
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    backgroundColor: "rgba(244, 249, 251, 0.98)",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(56, 255, 226, 0.3)",
-    color: "#F8FAFC",
+    borderColor: "rgba(154, 176, 194, 0.42)",
+    color: "#10233F",
     fontSize: 16,
   },
   button: {
-    backgroundColor: BrandColors.primaryButton,
+    backgroundColor: "#10233F",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: {
-    backgroundColor: "#4B5563",
+    backgroundColor: "#5C6B7D",
   },
   buttonText: {
-    color: "#ECFEFF",
+    color: "#F4FFFC",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -274,12 +279,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   loginLink: {
-    color: "#000506",
+    color: "#10233F",
     fontSize: 14,
     fontWeight: "600",
   },
   linkDisabled: {
-    color: "#010712",
+    color: "#43556A",
     opacity: 0.6,
   },
 });

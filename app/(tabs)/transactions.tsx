@@ -32,6 +32,7 @@ interface Transaction {
   category: string;
   date: string;
   notes?: string;
+  recorrente?: boolean;
 }
 
 interface ExportRow {
@@ -51,7 +52,8 @@ interface ExportContext {
   balance: number;
 }
 
-const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+const DASHBOARD_GRADIENT = ["#F4F7FB", "#EAF1F8", "#E2ECF6", "#DCE7F4"] as const;
+const RECURRING_OCCURRENCES_TOTAL = 12;
 
 export default function TransactionsPage() {
   const router = useRouter();
@@ -76,6 +78,7 @@ export default function TransactionsPage() {
   const [periodPromptOpen, setPeriodPromptOpen] = useState(false);
   const [monthDraft, setMonthDraft] = useState(`${String(new Date().getMonth() + 1).padStart(2, "0")}-${new Date().getFullYear()}`);
   const [initialPeriod, setInitialPeriod] = useState({ startDate: "", endDate: "" });
+  const [periodSyncToken, setPeriodSyncToken] = useState(0);
   const [selectedMonthLabel, setSelectedMonthLabel] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
@@ -204,6 +207,29 @@ export default function TransactionsPage() {
   const loadTransactions = async () => {
     try {
       const data = await apiService.getTransactions();
+      const getMonthKey = (value: unknown) => {
+        const raw = String(value ?? "").trim();
+        if (!raw) return "sem-data";
+
+        const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+        const brSlashPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+        if (isoPattern.test(raw)) {
+          const [, year, month] = raw.match(isoPattern)!;
+          return `${year}-${month}`;
+        }
+
+        if (brSlashPattern.test(raw) || brDashPattern.test(raw)) {
+          const match = raw.match(brSlashPattern) ?? raw.match(brDashPattern);
+          return `${match![3]}-${match![2]}`;
+        }
+
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) return "data-invalida";
+        return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+      };
+
       const resolveTransactionIds = (item: any, index: number) => {
         const candidates: string[] = [];
         const pushCandidate = (value: unknown) => {
@@ -291,11 +317,20 @@ export default function TransactionsPage() {
             new Date().toISOString(),
         ),
         notes: t?.notes ?? t?.observacao ?? undefined,
+        recorrente: Boolean(t?.recorrente ?? t?.recurring ?? t?.isRecurring ?? t?.recorrencia),
       };
     }).map((transaction, index) => ({
         ...transaction,
         id: `${transaction.type}-${transaction.backendId}-${index}`,
       }));
+
+      const monthCounts = normalized.reduce<Record<string, number>>((acc, transaction) => {
+        const monthKey = getMonthKey(transaction.date);
+        acc[monthKey] = (acc[monthKey] ?? 0) + 1;
+        return acc;
+      }, {});
+      console.log("[Transactions] normalized month counts:", monthCounts);
+
       setTransactions(normalized);
       return normalized;
     } catch (error: any) {
@@ -309,6 +344,7 @@ export default function TransactionsPage() {
   const handleSubmit = async (data: TransactionFormData) => {
     try {
       setLoading(true);
+      let successMessage = "";
 
       const normalizeDateToIso = (value: string) => {
         const raw = String(value ?? "").trim();
@@ -336,6 +372,44 @@ export default function TransactionsPage() {
         categoria: data.category,
         data: normalizeDateToIso(data.date),
         observacao: data.notes,
+        recorrente: data.recorrente,
+        recurring: data.recorrente,
+      };
+
+      const parseIsoDateParts = (value: string) => {
+        const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        return {
+          year: Number(match[1]),
+          month: Number(match[2]),
+          day: Number(match[3]),
+        };
+      };
+
+      const addMonthsToIsoDate = (value: string, monthsToAdd: number) => {
+        const parts = parseIsoDateParts(value);
+        if (!parts) return value;
+
+        const target = new Date(parts.year, parts.month - 1 + monthsToAdd, 1);
+        const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+        const safeDay = Math.min(parts.day, lastDay);
+        const month = String(target.getMonth() + 1).padStart(2, "0");
+        const day = String(safeDay).padStart(2, "0");
+
+        return `${target.getFullYear()}-${month}-${day}`;
+      };
+
+      const buildRecurringPayloads = () => {
+        const baseDate = payload.data;
+        const generated = Array.from({ length: RECURRING_OCCURRENCES_TOTAL }, (_, index) => ({
+          ...payload,
+          data: addMonthsToIsoDate(baseDate, index),
+        }));
+        console.log(
+          "[Transactions] recurring payload dates:",
+          generated.map((item) => item.data),
+        );
+        return generated;
       };
 
       const normalizeComparableDate = (value: string) => {
@@ -364,12 +438,17 @@ export default function TransactionsPage() {
       };
 
       const normalizeText = (value: string) => String(value ?? "").trim().toLowerCase();
-      const justSavedMatches = (transaction: Transaction) => {
+      const matchesRecurringSeries = (transaction: Transaction) => {
         return (
           transaction.type === data.type &&
           Math.abs(Number(transaction.amount ?? 0) - Number(data.amount ?? 0)) < 0.001 &&
           normalizeText(transaction.description) === normalizeText(data.description) &&
-          normalizeText(transaction.category) === normalizeText(data.category) &&
+          normalizeText(transaction.category) === normalizeText(data.category)
+        );
+      };
+      const justSavedMatches = (transaction: Transaction) => {
+        return (
+          matchesRecurringSeries(transaction) &&
           normalizeComparableDate(transaction.date) === payload.data
         );
       };
@@ -395,18 +474,105 @@ export default function TransactionsPage() {
         if (!updated) {
           throw lastError ?? new Error("Nao foi possivel atualizar a transacao");
         }
-      } else if (data.type === "expense") {
-        await apiService.createDespesa(payload);
+        successMessage = "Transacao atualizada com sucesso!";
       } else {
-        await apiService.createReceita({
-          ...payload,
-          categoria: data.category,
-        });
+        const payloadsToCreate = data.recorrente ? buildRecurringPayloads() : [payload];
+        const createTransaction = (dto: typeof payload) =>
+          data.type === "expense"
+            ? apiService.createDespesa(dto)
+            : apiService.createReceita({
+                ...dto,
+                categoria: data.category,
+              });
+
+        const creationResults = await Promise.allSettled(
+          payloadsToCreate.map((item) => createTransaction(item)),
+        );
+
+        const failedCreations = creationResults.filter((result) => result.status === "rejected");
+        if (failedCreations.length === creationResults.length) {
+          const firstError = failedCreations[0] as PromiseRejectedResult;
+          throw firstError.reason ?? new Error("Nao foi possivel salvar a transacao recorrente");
+        }
+
+        if (failedCreations.length > 0) {
+          successMessage = `Foram salvas ${creationResults.length - failedCreations.length} de ${creationResults.length} recorrencias. Verifique os meses restantes.`;
+        } else {
+          successMessage = data.recorrente
+            ? `Transacao recorrente cadastrada para ${RECURRING_OCCURRENCES_TOTAL} meses.`
+            : "Transacao cadastrada com sucesso!";
+        }
       }
 
       let latestTransactions = await loadTransactions();
 
+      if (editingTransaction && data.recorrente) {
+        const expectedDates = buildRecurringPayloads().map((item) => item.data);
+        const matchedDates = latestTransactions
+          .filter(matchesRecurringSeries)
+          .map((transaction) => normalizeComparableDate(transaction.date))
+          .filter(Boolean);
+
+        const missingDates = expectedDates.filter((date) => !matchedDates.includes(date));
+
+        if (missingDates.length > 0) {
+          const missingPayloads = buildRecurringPayloads().filter((item) =>
+            missingDates.includes(item.data),
+          );
+          const createTransaction = (dto: typeof payload) =>
+            data.type === "expense"
+              ? apiService.createDespesa(dto)
+              : apiService.createReceita({
+                  ...dto,
+                  categoria: data.category,
+                });
+
+          const creationResults = await Promise.allSettled(
+            missingPayloads.map((item) => createTransaction(item)),
+          );
+          const createdCount = creationResults.filter((result) => result.status === "fulfilled").length;
+          const failedCount = creationResults.length - createdCount;
+
+          latestTransactions = await loadTransactions();
+
+          if (createdCount > 0) {
+            successMessage = `${successMessage} ${createdCount} recorrencias futuras foram criadas.`;
+          }
+
+          if (failedCount > 0) {
+            successMessage = `${successMessage} ${failedCount} recorrencias futuras nao puderam ser criadas.`;
+          }
+
+          console.log("[Transactions] edit recurring backfill:", {
+            expectedDates,
+            matchedDates,
+            missingDates,
+            createdCount,
+            failedCount,
+          });
+        }
+      }
+
       if (!editingTransaction) {
+        if (data.recorrente) {
+          const expectedDates = buildRecurringPayloads().map((item) => item.data);
+          const matchedDates = latestTransactions
+            .filter(matchesRecurringSeries)
+            .map((transaction) => normalizeComparableDate(transaction.date))
+            .filter(Boolean);
+
+          const missingDates = expectedDates.filter((date) => !matchedDates.includes(date));
+          console.log("[Transactions] recurring verification:", {
+            expectedDates,
+            matchedDates,
+            missingDates,
+          });
+
+          if (missingDates.length > 0) {
+            successMessage = `${successMessage} Meses nao retornados pela API apos salvar: ${missingDates.join(", ")}.`;
+          }
+        }
+
         let foundSavedTransaction = latestTransactions.some(justSavedMatches);
 
         // Some backends delay expense aggregation; retry quickly before requiring manual refresh.
@@ -432,13 +598,14 @@ export default function TransactionsPage() {
               category: data.category,
               date: payload.data,
               notes: data.notes,
+              recorrente: data.recorrente,
             },
             ...previous,
           ]);
         }
       }
 
-      showMessage("Sucesso", editingTransaction ? "Transacao atualizada com sucesso!" : "Transacao cadastrada com sucesso!");
+      showMessage("Sucesso", successMessage);
       resetModalState();
     } catch (error: any) {
       const message = String(error?.message ?? "Erro ao salvar transacao");
@@ -479,6 +646,105 @@ export default function TransactionsPage() {
     }
   };
 
+  const executeDeleteSeries = async (transaction: Transaction) => {
+    try {
+      const normalizeText = (value: string) => String(value ?? "").trim().toLowerCase();
+      const normalizeComparableDate = (value: string) => {
+        const raw = String(value ?? "").trim();
+        if (!raw) return "";
+
+        const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
+        const brSlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        const brDash = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+        if (isoDate.test(raw)) return raw;
+        if (brSlash.test(raw)) {
+          const [, day, month, year] = raw.match(brSlash)!;
+          return `${year}-${month}-${day}`;
+        }
+        if (brDash.test(raw)) {
+          const [, day, month, year] = raw.match(brDash)!;
+          return `${year}-${month}-${day}`;
+        }
+
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) return "";
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      const seriesTransactions = transactions.filter((item) => {
+        const validDeleteCandidates = (item.deleteCandidates ?? []).filter((candidate) => {
+          const normalized = String(candidate ?? "").trim();
+          return (
+            normalized.length > 0 &&
+            !normalized.startsWith("tx-local-") &&
+            !/^tx-\d+$/.test(normalized)
+          );
+        });
+
+        return (
+          item.type === transaction.type &&
+          Math.abs(Number(item.amount ?? 0) - Number(transaction.amount ?? 0)) < 0.001 &&
+          normalizeText(item.description) === normalizeText(transaction.description) &&
+          normalizeText(item.category) === normalizeText(transaction.category) &&
+          normalizeComparableDate(item.date) >= normalizeComparableDate(transaction.date) &&
+          validDeleteCandidates.length > 0
+        );
+      });
+
+      const uniqueSeriesTransactions = Array.from(
+        new Map(seriesTransactions.map((item) => [item.backendId ?? item.id, item])).values(),
+      );
+
+      let deletedCount = 0;
+      let failedCount = 0;
+
+      for (const item of uniqueSeriesTransactions) {
+        let deleted = false;
+        for (const candidateId of item.deleteCandidates ?? []) {
+          try {
+            await apiService.deleteTransaction(candidateId, item.type);
+            deleted = true;
+            deletedCount += 1;
+            break;
+          } catch {
+            // Continue trying other candidate IDs for the same transaction.
+          }
+        }
+
+        if (!deleted) {
+          failedCount += 1;
+        }
+      }
+
+      if (deletedCount === 0) {
+        throw new Error("Nao foi possivel excluir a serie recorrente");
+      }
+
+      await loadTransactions();
+
+      if (failedCount > 0) {
+        showMessage(
+          "Sucesso parcial",
+          `${deletedCount} transacoes recorrentes foram excluidas e ${failedCount} nao puderam ser removidas.`,
+        );
+        return;
+      }
+
+      showMessage("Sucesso", `${deletedCount} transacoes recorrentes foram excluidas com sucesso!`);
+    } catch (error: any) {
+      const message = String(error?.message ?? "Nao foi possivel excluir a serie recorrente");
+      if (message.includes("403")) {
+        showMessage("Erro 403", "Sem permissao para excluir esta serie de transacoes.");
+        return;
+      }
+      showMessage("Erro", message);
+    }
+  };
+
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setQuickActionType(null);
@@ -490,41 +756,72 @@ export default function TransactionsPage() {
     const transaction = transactions.find((item) => item.id === id);
     if (!transaction) return;
 
-    if (!transaction?.backendId || transaction.backendId.startsWith("tx-")) {
+    const validDeleteCandidates = (transaction.deleteCandidates ?? []).filter(
+      (candidate) => {
+        const normalized = String(candidate ?? "").trim();
+        return (
+          normalized.length > 0 &&
+          !normalized.startsWith("tx-local-") &&
+          !/^tx-\d+$/.test(normalized)
+        );
+      },
+    );
+
+    if (validDeleteCandidates.length === 0) {
+      console.log("[Transactions] delete blocked, no valid candidate:", {
+        id: transaction.id,
+        backendId: transaction.backendId,
+        deleteCandidates: transaction.deleteCandidates,
+      });
       showMessage("Erro", "Esta transacao nao possui um ID valido para exclusao.");
       return;
     }
 
-   if (Platform.OS === "web") {
-  Alert.alert(
-    "Excluir transacao",
-    "Tem certeza que deseja excluir esta transacao?",
-    [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: () => {
-          if (transaction) {
-            void executeDelete(transaction);
-          }
-        },
-      },
-    ]
-  );
-  return;
-}
+    const transactionForDelete = {
+      ...transaction,
+      deleteCandidates: validDeleteCandidates,
+    };
 
-    Alert.alert("Excluir transacao", "Tem certeza que deseja excluir esta transacao?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: () => {
-          void executeDelete(transaction);
+    if (Platform.OS === "web") {
+      const webEnv = globalThis as {
+        confirm?: (message?: string) => boolean;
+      };
+      const isRecurring = Boolean(transaction.recorrente);
+      const confirmed = webEnv.confirm?.(
+        isRecurring
+          ? "Tem certeza que deseja excluir esta transacao recorrente e os meses seguintes?"
+          : "Tem certeza que deseja excluir esta transacao?",
+      );
+      if (confirmed) {
+        if (isRecurring) {
+          void executeDeleteSeries(transactionForDelete);
+        } else {
+          void executeDelete(transactionForDelete);
+        }
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Excluir transacao",
+      transaction.recorrente
+        ? "Tem certeza que deseja excluir esta transacao recorrente e os meses seguintes?"
+        : "Tem certeza que deseja excluir esta transacao?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => {
+            if (transaction.recorrente) {
+              void executeDeleteSeries(transactionForDelete);
+              return;
+            }
+            void executeDelete(transactionForDelete);
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const handleExportPdf = () => {
@@ -726,6 +1023,7 @@ export default function TransactionsPage() {
                   onDelete={handleDelete}
                   initialStartDate={initialPeriod.startDate}
                   initialEndDate={initialPeriod.endDate}
+                  periodSyncToken={periodSyncToken}
                   onExportContextChange={setExportContext}
                 />
               </View>
@@ -799,6 +1097,7 @@ export default function TransactionsPage() {
                       startDate: monthPeriod.startDate,
                       endDate: monthPeriod.endDate,
                     });
+                    setPeriodSyncToken((current) => current + 1);
                     setSelectedMonthLabel(monthPeriod.label);
                     setPeriodPromptOpen(false);
                   }}
@@ -829,8 +1128,8 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 246,
     borderRightWidth: 1,
-    borderRightColor: "#d9dde5",
-    backgroundColor: "#f8f8fa",
+    borderRightColor: "rgba(148, 163, 184, 0.24)",
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
   },
   sidebarContent: {
     paddingVertical: 24,
@@ -840,8 +1139,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 24,
     width: "100%",
     maxWidth: 1330,
     alignSelf: "center",
@@ -849,6 +1148,16 @@ const styles = StyleSheet.create({
   pageContent: {
     flex: 1,
     gap: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.52)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
   },
   loadingContainer: {
     flex: 1,
@@ -859,63 +1168,79 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: "#666666",
+    color: "#64748b",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 2,
+    alignItems: "flex-start",
+    marginBottom: 4,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148, 163, 184, 0.18)",
   },
   title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#ffffff",
+    fontSize: 38,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -1.1,
   },
   titleBlock: {
-    gap: 6,
+    gap: 10,
   },
   periodSwitchButton: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.45)",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderColor: "rgba(148, 163, 184, 0.28)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   periodSwitchButtonText: {
-    color: "#ffffff",
+    color: "#334155",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   exportButton: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   exportButtonText: {
-    color: "#0f172a",
+    color: "#f8fafc",
     fontSize: 13,
     fontWeight: "700",
   },
   floatingButton: {
     position: "absolute",
     right: 18,
-    backgroundColor: "#0B6E5B",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderRadius: 999,
-    shadowColor: "#000000",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 6,
     zIndex: 20,
   },
   floatingButtonText: {
-    color: "#ECFEFF",
+    color: "#f8fafc",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -933,9 +1258,11 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 650,
     maxHeight: "88%",
-    borderRadius: 14,
+    borderRadius: 24,
     overflow: "hidden",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
   },
   modalHeader: {
     flexDirection: "row",
@@ -944,66 +1271,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "rgba(148, 163, 184, 0.22)",
+    backgroundColor: "rgba(255,255,255,0.72)",
   },
   modalTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
   },
   modalCloseButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
   },
   modalCloseButtonText: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#111827",
+    fontWeight: "700",
+    color: "#0f172a",
   },
   periodPromptContent: {
     width: "100%",
     maxWidth: 760,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    padding: 18,
+    borderRadius: 24,
+    backgroundColor: "#f8fafc",
+    padding: 24,
     gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
   },
   periodPromptTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
   },
   periodPromptText: {
-    fontSize: 13,
-    color: "#4b5563",
+    fontSize: 14,
+    color: "#64748b",
   },
   periodInput: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: "#111827",
+    borderColor: "rgba(148, 163, 184, 0.3)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#0f172a",
   },
   periodPromptActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
   },
   periodPromptButton: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
   periodPromptApplyButton: {
-    backgroundColor: "#0B6E5B",
+    backgroundColor: "#0f172a",
   },
   periodPromptApplyText: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#ECFEFF",
+    fontWeight: "700",
+    color: "#f8fafc",
   },
 });

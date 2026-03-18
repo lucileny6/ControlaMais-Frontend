@@ -35,7 +35,7 @@ export default function HomeScreen() {
 
   return (
     <LinearGradient
-      colors={["#000000", "#073D33", "#107A65", "#20F4CA"]}
+      colors={["#0B1624", "#12354A", "#178A86", "#7FE7D0"]}
       locations={[0, 0.3, 0.57, 0.82, 1]}
       style={styles.page}
     >
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#F7F8FA",
+    color: "#F5FBFC",
     fontSize: 72, // 🔥 maior
     fontWeight: "600",
     letterSpacing: -1.5,
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
-    color: "#B7C1C1",
+    color: "#E0ECEC",
     fontSize: 16, // 🔥 maior
     lineHeight: 24,
     maxWidth: 420,
@@ -154,10 +154,10 @@ const styles = StyleSheet.create({
   enterButton: {
     borderRadius: 999,
     borderWidth: 1.3,
-    borderColor: "rgba(255, 255, 255, 0.45)",
+    borderColor: "rgba(223, 247, 242, 0.3)",
     paddingVertical: 12,
     paddingHorizontal: 26,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
 
   enterButtonText: {
@@ -170,14 +170,14 @@ const styles = StyleSheet.create({
   downloadButton: {
     borderRadius: 999,
     borderWidth: 1.3,
-    borderColor: "#36FF89",
+    borderColor: "#7FF4D2",
     paddingVertical: 12,
     paddingHorizontal: 26,
-    backgroundColor: "rgba(2, 12, 10, 0.55)",
+    backgroundColor: "#10233F",
   },
 
   downloadButtonText: {
-    color: "#D5FFE7",
+    color: "#E8FFF7",
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.9,
@@ -202,16 +202,16 @@ const styles = StyleSheet.create({
   imageEnterButton: {
     position: "absolute",
     bottom: 28,
-    backgroundColor: "#020305",
+    backgroundColor: "#10233F",
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1.2,
-    borderColor: "#29E9CF",
+    borderColor: "#63E7CB",
   },
 
   imageEnterButtonText: {
-    color: "#29E9CF",
+    color: "#DDFCF5",
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.6,

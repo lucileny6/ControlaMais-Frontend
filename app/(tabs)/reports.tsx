@@ -3,7 +3,7 @@ import { DashboardNav } from '@/components/dashboard-nav';
 import { ExpenseChart, ExpenseData } from '@/components/expense-chart';
 import { FinancialInsights, Insight } from '@/components/financial-insights';
 import { IncomeExpenseChart, MonthlyChartPoint } from '@/components/income-expense-chart';
-import { MonthlySummary, MonthlySummaryData } from '@/components/monthly-summary';
+import { MonthlySummary, ResumoFinanceiroMensal } from '@/components/monthly-summary';
 import analisarFinancas from '@/services/financial-ai';
 import { apiService } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -99,7 +99,7 @@ export default function ReportsPage() {
     const now = new Date();
     return `${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
   });
-  const [monthlySummaryData, setMonthlySummaryData] = useState<MonthlySummaryData | undefined>(undefined);
+  const [monthlySummaryData, setMonthlySummaryData] = useState<ResumoFinanceiroMensal | undefined>(undefined);
   const [monthlyChartData, setMonthlyChartData] = useState<MonthlyChartPoint[]>([]);
   const [expenseChartData, setExpenseChartData] = useState<ExpenseData[]>([]);
   const [insightsData, setInsightsData] = useState<Insight[]>([]);
@@ -282,16 +282,16 @@ export default function ReportsPage() {
       }, {});
       const sugestoesIA = analisarFinancas(estadoFinanceiro, totalIncome, totalExpenses);
 
-      const expensesByCategory = GROUP_ORDER.map((group) => {
-        const amount = Array.from(expensesByCategoryMap.entries()).reduce((acc, [rawCategory, rawAmount]) => {
+      const gastosPorCategoria = GROUP_ORDER.map((group) => {
+        const valorGasto = Array.from(expensesByCategoryMap.entries()).reduce((acc, [rawCategory, rawAmount]) => {
           if (resolveGroupByCategory(rawCategory) !== group) return acc;
           return acc + rawAmount;
         }, 0);
 
         return {
-          category: GROUP_LABEL[group],
-          amount,
-          budget: MOCK_BUDGET_BY_GROUP[group],
+          categoria: GROUP_LABEL[group],
+          valorGasto,
+          orcamento: MOCK_BUDGET_BY_GROUP[group],
         };
       });
 
@@ -316,10 +316,10 @@ export default function ReportsPage() {
       });
 
       const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6'];
-      const chartExpenses: ExpenseData[] = expensesByCategory.map((item, index) => ({
-        category: item.category,
-        budget: item.budget,
-        amount: item.amount,
+      const chartExpenses: ExpenseData[] = gastosPorCategoria.map((item, index) => ({
+        category: item.categoria,
+        budget: item.orcamento,
+        amount: item.valorGasto,
         color: palette[index % palette.length],
       }));
 
@@ -383,13 +383,13 @@ export default function ReportsPage() {
       }
 
       setMonthlySummaryData({
-        totalIncome,
-        totalExpenses,
-        savings,
-        savingsGoal: Math.max(totalIncome * 0.2, 1),
-        monthLabel: baseDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-        expensesByCategory,
-        aiSuggestions: sugestoesIA.slice(0, 3),
+        rendaTotal: totalIncome,
+        gastosTotais: totalExpenses,
+        economia: savings,
+        metaEconomia: Math.max(totalIncome * 0.2, 1),
+        mes: baseDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        gastosPorCategoria,
+        sugestoesIA: sugestoesIA.slice(0, 3),
       });
       setMonthlyChartData(chartData);
       setExpenseChartData(chartExpenses);

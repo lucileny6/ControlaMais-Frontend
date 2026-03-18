@@ -1,46 +1,91 @@
 ﻿import React from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-export interface MonthlySummaryData {
-  totalIncome: number;
-  totalExpenses: number;
-  savings: number;
-  savingsGoal: number;
-  monthLabel: string;
-  expensesByCategory: Array<{ category: string; amount: number; budget: number }>;
-  aiSuggestions?: Array<{ categoria: string; percentualReducao: number; economia: number }>;
+export interface ResumoFinanceiroMensal {
+  rendaTotal: number;
+  gastosTotais: number;
+  economia: number;
+  metaEconomia: number;
+  mes: string;
+  gastosPorCategoria: Array<{ categoria: string; valorGasto: number; orcamento: number }>;
+  sugestoesIA?: Array<{ categoria: string; percentualReducao: number; economia: number }>;
 }
 
-const fallbackSummary: MonthlySummaryData = {
-  totalIncome: 3200,
-  totalExpenses: 1200,
-  savings: 2000,
-  savingsGoal: 1000,
-  monthLabel: 'Janeiro 2024',
-  expensesByCategory: [
-    { category: 'Alimentacao', amount: 450, budget: 500 },
-    { category: 'Transporte', amount: 200, budget: 250 },
-    { category: 'Contas', amount: 300, budget: 350 },
-    { category: 'Lazer', amount: 150, budget: 200 },
+type MonthlySummaryDataLegado = {
+  totalIncome?: number;
+  totalExpenses?: number;
+  savings?: number;
+  savingsGoal?: number;
+  monthLabel?: string;
+  expensesByCategory?: Array<{ category?: string; amount?: number; budget?: number }>;
+  aiSuggestions?: Array<{ categoria?: string; percentualReducao?: number; economia?: number }>;
+};
+
+const resumoFinanceiroMensal: ResumoFinanceiroMensal = {
+  rendaTotal: 3200,
+  gastosTotais: 1200,
+  economia: 2000,
+  metaEconomia: 1000,
+  mes: 'Janeiro 2024',
+  gastosPorCategoria: [
+    { categoria: 'Alimentacao', valorGasto: 450, orcamento: 500 },
+    { categoria: 'Transporte', valorGasto: 200, orcamento: 250 },
+    { categoria: 'Contas', valorGasto: 300, orcamento: 350 },
+    { categoria: 'Lazer', valorGasto: 150, orcamento: 200 },
   ],
-  aiSuggestions: [
+  sugestoesIA: [
     { categoria: 'Moradia', percentualReducao: 10, economia: 120 },
     { categoria: 'Compras', percentualReducao: 15, economia: 90 },
     { categoria: 'Restaurante', percentualReducao: 10, economia: 45 },
   ],
 };
 
-export function MonthlySummary({ data }: { data?: MonthlySummaryData }) {
-  const summary = data ?? fallbackSummary;
+function normalizarResumoFinanceiro(
+  data?: ResumoFinanceiroMensal | MonthlySummaryDataLegado
+): ResumoFinanceiroMensal {
+  if (!data) {
+    return resumoFinanceiroMensal;
+  }
+
+  const dadosAtuais = data as Partial<ResumoFinanceiroMensal>;
+  const dadosLegados = data as MonthlySummaryDataLegado;
+
+  return {
+    rendaTotal: dadosAtuais.rendaTotal ?? dadosLegados.totalIncome ?? resumoFinanceiroMensal.rendaTotal,
+    gastosTotais: dadosAtuais.gastosTotais ?? dadosLegados.totalExpenses ?? resumoFinanceiroMensal.gastosTotais,
+    economia: dadosAtuais.economia ?? dadosLegados.savings ?? resumoFinanceiroMensal.economia,
+    metaEconomia: dadosAtuais.metaEconomia ?? dadosLegados.savingsGoal ?? resumoFinanceiroMensal.metaEconomia,
+    mes: dadosAtuais.mes ?? dadosLegados.monthLabel ?? resumoFinanceiroMensal.mes,
+    gastosPorCategoria:
+      dadosAtuais.gastosPorCategoria ??
+      dadosLegados.expensesByCategory?.map((item) => ({
+        categoria: item.category ?? '',
+        valorGasto: item.amount ?? 0,
+        orcamento: item.budget ?? 0,
+      })) ??
+      resumoFinanceiroMensal.gastosPorCategoria,
+    sugestoesIA:
+      dadosAtuais.sugestoesIA ??
+      dadosLegados.aiSuggestions?.map((item) => ({
+        categoria: item.categoria ?? '',
+        percentualReducao: item.percentualReducao ?? 0,
+        economia: item.economia ?? 0,
+      })) ??
+      resumoFinanceiroMensal.sugestoesIA,
+  };
+}
+
+export function MonthlySummary({ data }: { data?: ResumoFinanceiroMensal | MonthlySummaryDataLegado }) {
+  const summary = normalizarResumoFinanceiro(data);
   const { width } = useWindowDimensions();
   const isTabletOrMobile = width < 1024;
-  const savingsRate = summary.totalIncome > 0 ? (summary.savings / summary.totalIncome) * 100 : 0;
-  const expenseRate = summary.totalIncome > 0 ? (summary.totalExpenses / summary.totalIncome) * 100 : 0;
+  const savingsRate = summary.rendaTotal > 0 ? (summary.economia / summary.rendaTotal) * 100 : 0;
+  const expenseRate = summary.rendaTotal > 0 ? (summary.gastosTotais / summary.rendaTotal) * 100 : 0;
   const plannedExpenseLimit = 0.6;
   const expenseRateDecimal =
-    summary.totalIncome > 0
-      ? summary.totalExpenses / summary.totalIncome
-      : summary.totalExpenses > 0
+    summary.rendaTotal > 0
+      ? summary.gastosTotais / summary.rendaTotal
+      : summary.gastosTotais > 0
         ? 1
         : 0;
   const financialStatus =
@@ -49,10 +94,10 @@ export function MonthlySummary({ data }: { data?: MonthlySummaryData }) {
       : expenseRateDecimal <= 0.8
         ? 'Equilibrado'
         : 'Desequilibrado';
-  const aiSuggestions = (summary.aiSuggestions ?? []).slice(0, 3);
+  const sugestoesIA = (summary.sugestoesIA ?? []).slice(0, 3);
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('pt-BR', {
+  const formatCurrency = (valor: number | undefined | null) => {
+    return (valor ?? 0).toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
     });
   };
@@ -77,28 +122,28 @@ export function MonthlySummary({ data }: { data?: MonthlySummaryData }) {
       <View style={[styles.card, isTabletOrMobile ? styles.cardResponsive : styles.cardDesktop]}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Resumo do Mes</Text>
-          <Text style={styles.cardDescription}>{summary.monthLabel}</Text>
+          <Text style={styles.cardDescription}>{summary.mes}</Text>
         </View>
         <View style={styles.cardContent}>
           <View style={styles.valuesContainer}>
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Receitas totais</Text>
               <Text style={[styles.valueAmount, styles.incomeText]} numberOfLines={1}>
-                R$ {formatCurrency(summary.totalIncome)}
+                R$ {formatCurrency(summary.rendaTotal)}
               </Text>
             </View>
 
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Despesas totais</Text>
               <Text style={[styles.valueAmount, styles.expenseText]} numberOfLines={1}>
-                R$ {formatCurrency(summary.totalExpenses)}
+                R$ {formatCurrency(summary.gastosTotais)}
               </Text>
             </View>
 
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Economia</Text>
               <Text style={[styles.valueAmount, styles.savingsText]} numberOfLines={1}>
-                R$ {formatCurrency(summary.savings)}
+                R$ {formatCurrency(summary.economia)}
               </Text>
             </View>
           </View>
@@ -149,10 +194,10 @@ export function MonthlySummary({ data }: { data?: MonthlySummaryData }) {
 
           <View style={styles.aiSection}>
             <Text style={styles.aiTitle}>Sugestoes da IA</Text>
-            {aiSuggestions.length === 0 && (
+            {sugestoesIA.length === 0 && (
               <Text style={styles.emptyBudgetText}>Sem sugestoes para este periodo.</Text>
             )}
-            {aiSuggestions.map((item, index) => {
+            {sugestoesIA.map((item, index) => {
               return (
                 <View key={`${item.categoria}-${index}`} style={styles.suggestionItem}>
                   <Text style={styles.suggestionText} numberOfLines={2}>

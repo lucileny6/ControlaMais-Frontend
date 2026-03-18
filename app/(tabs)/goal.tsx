@@ -24,7 +24,8 @@ interface Goal {
   category: string;
 }
 
-const DASHBOARD_GRADIENT = ['#000000', '#073D33', '#107A65', '#20F4CA'] as const;
+const DASHBOARD_GRADIENT = ['#F4F7FB', '#EAF1F8', '#E2ECF6', '#DCE7F4'] as const;
+const GOALS_CACHE_KEY = 'goalsCache';
 
 export default function GoalsPage() {
   const router = useRouter();
@@ -82,28 +83,97 @@ export default function GoalsPage() {
   };
 
   const normalizeGoal = (goal: GoalDTO, index: number): Goal => {
-    const normalizedTitle = String(goal?.title ?? goal?.titulo ?? goal?.nome ?? '').trim();
-    const normalizedDescription = String(goal?.description ?? goal?.descricao ?? '').trim();
+    const normalizedTitle = String(
+      goal?.title ?? goal?.titulo ?? goal?.nome ?? (goal as any)?.name ?? (goal as any)?.label ?? '',
+    ).trim();
+    const normalizedDescription = String(
+      goal?.description ?? goal?.descricao ?? (goal as any)?.detalhes ?? (goal as any)?.observacao ?? '',
+    ).trim();
 
     return {
       id: String(goal?.id ?? goal?._id ?? `meta-${index}`),
       title: normalizedTitle || 'Meta sem titulo',
       description: normalizedDescription || 'Meta financeira',
-      targetAmount: toNumber(goal?.targetAmount ?? goal?.valorMeta),
-      currentAmount: toNumber(goal?.currentAmount ?? goal?.valorAtual),
-      deadline: String(goal?.deadline ?? goal?.prazo ?? ''),
-      category: String(goal?.category ?? goal?.categoria ?? 'Geral'),
+      targetAmount: toNumber(
+        goal?.targetAmount ??
+        goal?.valorMeta ??
+        (goal as any)?.valorAlvo ??
+        (goal as any)?.meta ??
+        (goal as any)?.amount,
+      ),
+      currentAmount: toNumber(
+        goal?.currentAmount ??
+        goal?.valorAtual ??
+        (goal as any)?.valorGuardado ??
+        (goal as any)?.atual ??
+        (goal as any)?.savedAmount,
+      ),
+      deadline: String(
+        goal?.deadline ?? goal?.prazo ?? (goal as any)?.dataLimite ?? (goal as any)?.dueDate ?? '',
+      ),
+      category: String(goal?.category ?? goal?.categoria ?? (goal as any)?.tipo ?? 'Geral'),
     };
+  };
+
+  const mergeGoals = (baseGoals: Goal[], incomingGoals: Goal[]) => {
+    const goalMap = new Map<string, Goal>();
+
+    const getGoalKey = (goal: Goal) => {
+      const normalizedId = String(goal.id ?? '').trim();
+      if (normalizedId && !normalizedId.startsWith('meta-')) return `id:${normalizedId}`;
+
+      return `fallback:${goal.title.trim().toLowerCase()}|${goal.targetAmount}|${goal.deadline.trim()}`;
+    };
+
+    for (const goal of baseGoals) {
+      goalMap.set(getGoalKey(goal), goal);
+    }
+
+    for (const goal of incomingGoals) {
+      goalMap.set(getGoalKey(goal), goal);
+    }
+
+    return Array.from(goalMap.values());
+  };
+
+  const persistGoals = async (nextGoals: Goal[]) => {
+    try {
+      await AsyncStorage.setItem(GOALS_CACHE_KEY, JSON.stringify(nextGoals));
+    } catch (error) {
+      console.error('Erro ao salvar cache de metas:', error);
+    }
+  };
+
+  const loadCachedGoals = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(GOALS_CACHE_KEY);
+      if (!cached) return [] as Goal[];
+
+      const parsed = JSON.parse(cached) as Goal[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error('Erro ao carregar cache de metas:', error);
+      return [] as Goal[];
+    }
   };
 
   const loadGoals = async () => {
     try {
+      const cachedGoals = await loadCachedGoals();
+      if (cachedGoals.length > 0) {
+        setGoals(cachedGoals);
+      }
+
       const rawGoals = await apiService.getMetas();
       const normalizedGoals = (rawGoals ?? []).map(normalizeGoal);
-      setGoals(normalizedGoals);
+      const mergedGoals = mergeGoals(cachedGoals, normalizedGoals);
+      setGoals(mergedGoals);
+      await persistGoals(mergedGoals);
+      console.log('[Goals] loaded goals:', mergedGoals);
+      return true;
     } catch (error) {
       console.error('Erro ao carregar metas:', error);
-      setGoals([]);
+      return false;
     }
   };
 
@@ -198,25 +268,51 @@ export default function GoalsPage() {
 
     try {
       setIsCreatingGoal(true);
+      let savedGoal: Goal | null = null;
+
       if (editingGoalId) {
-        await apiService.updateMeta(editingGoalId, {
+        const response = await apiService.updateMeta(editingGoalId, {
           nome,
           valorMeta,
           descricao: descricao || undefined,
           prazo: prazo || undefined,
         });
+        savedGoal = normalizeGoal(response, 0);
       } else {
-        await apiService.createMeta({
+        const response = await apiService.createMeta({
           nome,
           valorMeta,
           descricao: descricao || undefined,
           prazo: prazo || undefined,
         });
+        savedGoal = normalizeGoal(response, 0);
       }
-      await loadGoals();
+
+      if (savedGoal) {
+        const cachedGoals = await loadCachedGoals();
+        const nextGoals = editingGoalId
+          ? mergeGoals(
+              cachedGoals.filter((goal) => goal.id !== editingGoalId),
+              [savedGoal],
+            )
+          : mergeGoals(cachedGoals, [savedGoal]);
+        setGoals(nextGoals);
+        await persistGoals(nextGoals);
+      }
+
+      const reloaded = await loadGoals();
       resetNewGoalForm();
       setEditingGoalId(null);
       setIsDialogOpen(false);
+      if (!reloaded) {
+        Alert.alert(
+          'Sucesso parcial',
+          editingGoalId
+            ? 'Meta atualizada, mas a lista nao conseguiu recarregar agora.'
+            : 'Meta criada, mas a lista nao conseguiu recarregar agora.',
+        );
+        return;
+      }
       Alert.alert('Sucesso', editingGoalId ? 'Meta atualizada com sucesso.' : 'Meta criada com sucesso.');
     } catch (error: any) {
       const message = String(error?.message ?? 'Nao foi possivel salvar a meta.');
@@ -237,9 +333,17 @@ export default function GoalsPage() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setGoals((previous) => previous.filter((item) => item.id !== goal.id));
+              const cachedGoals = await loadCachedGoals();
+              await persistGoals(cachedGoals.filter((item) => item.id !== goal.id));
               await apiService.deleteMeta(goal.id);
-              await loadGoals();
-              Alert.alert('Sucesso', 'Meta excluida com sucesso.');
+              const reloaded = await loadGoals();
+              Alert.alert(
+                reloaded ? 'Sucesso' : 'Sucesso parcial',
+                reloaded
+                  ? 'Meta excluida com sucesso.'
+                  : 'Meta excluida, mas a lista nao conseguiu recarregar agora.',
+              );
             } catch (error: any) {
               const message = String(error?.message ?? 'Nao foi possivel excluir a meta.');
               Alert.alert('Erro ao excluir meta', message);
@@ -272,10 +376,18 @@ export default function GoalsPage() {
         setUser(null);
       }
 
-      await loadGoals();
+      const cachedGoals = await loadCachedGoals();
+      if (cachedGoals.length > 0) {
+        setGoals(cachedGoals);
+      }
+
+      const loaded = await loadGoals();
+      if (!loaded) {
+        Alert.alert('Erro ao carregar metas', 'Nao foi possivel atualizar a lista de metas agora.');
+      }
     } catch (error) {
       console.error('Erro ao inicializar tela de metas:', error);
-      setGoals([]);
+      Alert.alert('Erro ao inicializar', 'Nao foi possivel carregar as metas neste momento.');
     } finally {
       setIsLoading(false);
     }
@@ -547,8 +659,8 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 256,
     borderRightWidth: 1,
-    borderRightColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
+    borderRightColor: 'rgba(148, 163, 184, 0.24)',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
   },
   sidebarContent: {
     paddingVertical: 24,
@@ -561,10 +673,21 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
   },
   pageContent: {
     flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.52)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
   },
   loadingContainer: {
     flex: 1,
@@ -575,48 +698,57 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#666666',
+    color: '#64748b',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 24,
+    marginBottom: 22,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148, 163, 184, 0.18)',
   },
   headerText: {
     flex: 1,
     marginRight: 12,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 6,
+    letterSpacing: -0.8,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#ffffff',
+    fontSize: 14,
+    color: '#64748b',
   },
   newGoalButton: {
-    backgroundColor: '#000000',
-    paddingHorizontal: 20,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   newGoalButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
   },
   section: {
     marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
     marginBottom: 16,
   },
   goalsGrid: {
@@ -626,20 +758,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   goalCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    elevation: 2,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
     minHeight: 220,
-    padding: 18,
+    padding: 20,
   },
   emptyGoalCard: {
     borderStyle: 'dashed',
-    borderColor: '#cbd5e1',
+    borderColor: 'rgba(148, 163, 184, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'rgba(248, 250, 252, 0.95)',
   },
   emptyGoalIcon: {
     fontSize: 28,
@@ -662,8 +797,8 @@ const styles = StyleSheet.create({
     marginTop: 14,
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderColor: 'rgba(148, 163, 184, 0.22)',
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -675,17 +810,17 @@ const styles = StyleSheet.create({
   goalHeader: {
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(148, 163, 184, 0.14)',
   },
   goalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0f172a',
     marginBottom: 4,
   },
   goalDescription: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: '#64748b',
   },
   goalContent: {
     paddingTop: 12,
@@ -700,13 +835,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   progressLabel: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
   },
   progressPercentage: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
   },
   progressBar: {
     height: 8,
@@ -719,30 +855,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   valueLabel: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 12,
+    color: '#64748b',
     marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   valueAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0f172a',
   },
   remainingInfo: {
     gap: 4,
   },
   remainingLabel: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 12,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   remainingAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0f172a',
   },
   remainingDays: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#64748b',
   },
   cardActions: {
     marginTop: 6,
@@ -752,11 +892,11 @@ const styles = StyleSheet.create({
   },
   editButton: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
+    borderColor: 'rgba(148, 163, 184, 0.22)',
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#eef2f7',
   },
   editButtonText: {
     fontSize: 12,
@@ -765,8 +905,8 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 8,
+    borderColor: 'rgba(239, 68, 68, 0.18)',
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: '#fef2f2',
@@ -784,12 +924,14 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
     width: '90%',
     maxWidth: 600,
     maxHeight: '80%',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -797,20 +939,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: 'rgba(255,255,255,0.72)',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0f172a',
   },
   closeButton: {
-    padding: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
   },
   closeButtonText: {
-    fontSize: 24,
-    color: '#6b7280',
-    fontWeight: 'bold',
+    fontSize: 18,
+    color: '#475569',
+    fontWeight: '800',
   },
   modalBody: {
     padding: 20,
@@ -828,27 +974,27 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontWeight: '700',
+    color: '#0f172a',
     marginBottom: 8,
   },
   input: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderColor: 'rgba(148, 163, 184, 0.22)',
+    borderRadius: 14,
     padding: 12,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 15,
+    color: '#0f172a',
   },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
   createButton: {
-    backgroundColor: '#000000',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    padding: 14,
+    borderRadius: 14,
     alignItems: 'center',
     marginTop: 8,
   },
@@ -856,8 +1002,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   createButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

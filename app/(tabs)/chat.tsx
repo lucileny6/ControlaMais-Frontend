@@ -2,6 +2,8 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
+import { AIResponse, AITransactionAction } from "@/lib/types";
+import { apiService } from "@/services/api";
 import { chatIAService } from "@/services/chatIA";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
@@ -25,12 +27,7 @@ interface Message {
   timestamp: Date;
 }
 
-interface AIResponse {
-  tipo: "TEXTO" | "CONFIRMACAO";
-  mensagem: string;
-}
-
-const DASHBOARD_GRADIENT = ["#000000", "#073D33", "#107A65", "#20F4CA"] as const;
+const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
 
 export default function ChatPage() {
   const insets = useSafeAreaInsets();
@@ -49,6 +46,7 @@ export default function ChatPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
+  const [pendingAction, setPendingAction] = useState<AITransactionAction | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -84,6 +82,7 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, iaMessage]);
       setAguardandoConfirmacao(response.tipo === "CONFIRMACAO");
+      setPendingAction(response.acao ?? response.action ?? null);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -99,13 +98,72 @@ export default function ChatPage() {
     }
   };
 
+  const createTransactionFromAction = async (action: AITransactionAction) => {
+    const rawType = String(action.tipo ?? action.type ?? "").trim().toLowerCase();
+    const normalizedType = rawType === "receita" || rawType === "income" ? "income" : "expense";
+    const amount = Number(action.valor ?? action.amount ?? 0);
+    const payload = {
+      descricao: String(action.descricao ?? action.description ?? "Lancamento via chat").trim(),
+      valor: Number.isFinite(amount) ? amount : 0,
+      categoria: String(action.categoria ?? action.category ?? "Sem categoria").trim(),
+      data: String(action.data ?? action.date ?? new Date().toISOString().split("T")[0]).trim(),
+      recorrente: Boolean(action.recorrente ?? action.recurring),
+      recurring: Boolean(action.recorrente ?? action.recurring),
+    };
+
+    if (!payload.descricao || payload.valor <= 0 || !payload.categoria || !payload.data) {
+      throw new Error("A resposta do chat nao trouxe dados suficientes para criar o lancamento.");
+    }
+
+    if (normalizedType === "income") {
+      await apiService.createReceita(payload);
+      return "Receita registrada com sucesso pelo chat.";
+    }
+
+    await apiService.createDespesa(payload);
+    return "Despesa registrada com sucesso pelo chat.";
+  };
+
   const confirmar = () => {
     setAguardandoConfirmacao(false);
-    handleSendMessage("sim");
+    if (!pendingAction) {
+      handleSendMessage("sim");
+      return;
+    }
+
+    setIsLoading(true);
+    void createTransactionFromAction(pendingAction)
+      .then((message) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            content: message,
+            isUser: false,
+            timestamp: new Date(),
+          },
+        ]);
+      })
+      .catch((error: any) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            content: String(error?.message ?? "Nao foi possivel registrar o lancamento via chat."),
+            isUser: false,
+            timestamp: new Date(),
+          },
+        ]);
+      })
+      .finally(() => {
+        setPendingAction(null);
+        setIsLoading(false);
+      });
   };
 
   const cancelar = () => {
     setAguardandoConfirmacao(false);
+    setPendingAction(null);
     handleSendMessage("cancelar");
   };
 
@@ -122,13 +180,21 @@ export default function ChatPage() {
           )}
 
           <View style={styles.main}>
+            <View style={styles.chatShell}>
+              <View style={styles.heroHeader}>
+                <Text style={styles.pageTitle}>Chat IA</Text>
+                <Text style={styles.pageSubtitle}>
+                  Converse com o assistente para registrar lancamentos e tirar duvidas financeiras.
+                </Text>
+              </View>
             <KeyboardAvoidingView
-              style={{ flex: 1 }}
+              style={styles.keyboardArea}
               behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
               <ScrollView
                 ref={scrollViewRef}
                 style={styles.messagesContainer}
+                contentContainerStyle={styles.messagesContent}
                 onContentSizeChange={() =>
                   scrollViewRef.current?.scrollToEnd({ animated: true })
                 }
@@ -144,7 +210,7 @@ export default function ChatPage() {
 
                 {aguardandoConfirmacao && (
                   <View style={styles.confirmBox}>
-                    <Text style={styles.confirmText}>Deseja confirmar a sessao?</Text>
+                    <Text style={styles.confirmText}>Deseja confirmar a acao sugerida pelo chat?</Text>
 
                     <View style={styles.confirmButtons}>
                       <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
@@ -166,6 +232,7 @@ export default function ChatPage() {
                 disabled={isLoading || aguardandoConfirmacao}
               />
             </KeyboardAvoidingView>
+            </View>
           </View>
         </View>
       </View>
@@ -177,42 +244,88 @@ const styles = StyleSheet.create({
   gradient: { flex: 1 },
   layoutContainer: { flex: 1, backgroundColor: "transparent" },
   content: { flex: 1, flexDirection: "row" },
-  sidebar: { width: 256, backgroundColor: "#fff" },
-  main: { flex: 1 },
-  messagesContainer: { flex: 1, padding: 16 },
+  sidebar: {
+    width: 256,
+    borderRightWidth: 1,
+    borderRightColor: "rgba(148, 163, 184, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+  },
+  main: { flex: 1, padding: 24 },
+  chatShell: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.74)",
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.92)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.07,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    overflow: "hidden",
+  },
+  heroHeader: {
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148, 163, 184, 0.14)",
+    backgroundColor: "rgba(255, 255, 255, 0.34)",
+  },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#10233f",
+    letterSpacing: -0.8,
+  },
+  pageSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#5f7087",
+    maxWidth: 760,
+  },
+  keyboardArea: { flex: 1 },
+  messagesContainer: { flex: 1 },
+  messagesContent: { paddingHorizontal: 18, paddingVertical: 14 },
 
   confirmBox: {
-    backgroundColor: "#eef2ff",
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 12,
+    backgroundColor: "#f6fafc",
+    padding: 16,
+    borderRadius: 18,
+    marginVertical: 14,
+    borderWidth: 1,
+    borderColor: "rgba(197, 210, 223, 0.45)",
   },
   confirmText: {
     fontSize: 14,
-    marginBottom: 8,
-    color: "#1e40af",
-    fontWeight: "500",
+    marginBottom: 12,
+    color: "#10233f",
+    fontWeight: "600",
   },
   confirmButtons: {
     flexDirection: "row",
     gap: 12,
   },
   confirmBtn: {
-    backgroundColor: "#10b981",
-    padding: 8,
-    borderRadius: 6,
+    backgroundColor: "#10233f",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
   },
   confirmBtnText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   cancelBtn: {
-    backgroundColor: "#ef4444",
-    padding: 8,
-    borderRadius: 6,
+    backgroundColor: "#f4f7fa",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(197, 210, 223, 0.55)",
   },
   cancelBtnText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: "#b84b5f",
+    fontWeight: "700",
   },
 });

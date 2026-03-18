@@ -1,102 +1,129 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-interface SimulationResult {
-  canAfford: boolean;
-  impactOnSavings: number;
-  monthsToRecover: number;
-  recommendation: string;
-  alternativeSuggestion?: string;
-}
+import { toast } from '@/hooks/use-toast';
+import { useDashboard } from '@/hooks/useDashboard';
+import { apiService } from '@/services/api';
+import { normalizeFinancialTransaction } from '@/services/financialEngine';
+
+const WEBHOOK_URL =
+  process.env.EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL ??
+  process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL ??
+  'http://localhost:5678/webhook/c4e4305b-1390-4c54-99de-71bc6c3b73b3';
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export function PurchaseSimulator() {
-  const [purchaseAmount, setPurchaseAmount] = useState("");
-  const [purchaseDescription, setPurchaseDescription] = useState("");
-  const [result, setResult] = useState<SimulationResult | null>(null);
+  const { saldo, loading: isDashboardLoading } = useDashboard();
+  const [purchaseAmount, setPurchaseAmount] = useState('');
+  const [purchaseDescription, setPurchaseDescription] = useState('');
+  const [installments, setInstallments] = useState('1');
+  const [result, setResult] = useState<JsonValue | null>(null);
+  const [showResultDetails, setShowResultDetails] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mock financial data - seria obtido do contexto real do usuário
-  const mockUserData = {
-    currentBalance: 2350,
-    monthlyIncome: 3200,
-    monthlyExpenses: 1200,
-    savingsGoal: 1000,
-    currentSavings: 750,
-  };
+  const parsedPurchaseAmount = useMemo(() => parseCurrencyInput(purchaseAmount), [purchaseAmount]);
+  const parsedInstallments = useMemo(() => parseMonthsInput(installments), [installments]);
+  const newBalance = parsedPurchaseAmount > 0 ? saldo - parsedPurchaseAmount : saldo;
+  const canSimulate =
+    parsedPurchaseAmount > 0 &&
+    parsedInstallments > 0 &&
+    !isLoading &&
+    !isDashboardLoading;
 
-  const simulatePurchase = () => {
-    if (!purchaseAmount || Number.parseFloat(purchaseAmount) <= 0) return;
+  const simulatePurchase = async () => {
+    if (parsedPurchaseAmount <= 0) {
+      toast({
+        title: 'Valor invalido',
+        description: 'Informe um valor de compra maior que zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    setIsLoading(true);
+    if (parsedInstallments <= 0) {
+      toast({
+        title: 'Parcelas invalidas',
+        description: 'Informe uma quantidade de parcelas maior que zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    // Simular processamento
-    setTimeout(() => {
-      const amount = Number.parseFloat(purchaseAmount);
-      const monthlySurplus = mockUserData.monthlyIncome - mockUserData.monthlyExpenses;
-      const newBalance = mockUserData.currentBalance - amount;
-      const impactOnSavings = Math.max(0, amount - (mockUserData.currentBalance - mockUserData.savingsGoal));
-      const monthsToRecover = impactOnSavings > 0 ? Math.ceil(impactOnSavings / monthlySurplus) : 0;
+    try {
+      setIsLoading(true);
+      setResult(null);
+      setShowResultDetails(false);
+      const projecaoMensal = await buildProjectionPayload(parsedInstallments);
 
-      let recommendation = "";
-      let alternativeSuggestion = "";
-      let canAfford = true;
+      const payload = {
+        descricao_compra: purchaseDescription.trim() || 'Compra simulada',
+        valor_compra: parsedPurchaseAmount,
+        parcelas: parsedInstallments,
+        meses_simulacao: parsedInstallments,
+        saldo,
+        Saldo: saldo,
+        saldo_atual: saldo,
+        saldo_apos_compra: newBalance,
+        projecao_mensal: projecaoMensal,
+        saldos_mensais: projecaoMensal.map((mes) => mes.saldo_base),
+      };
 
-      if (newBalance < 0) {
-        canAfford = false;
-        recommendation = "❌ Compra não recomendada: Você ficaria com saldo negativo.";
-        alternativeSuggestion = `Considere economizar por ${Math.ceil(Math.abs(newBalance) / monthlySurplus)} meses antes desta compra.`;
-      } else if (impactOnSavings > 0) {
-        canAfford = true;
-        recommendation = `⚠️ Compra possível, mas afetará sua meta de poupança em R$ ${impactOnSavings.toFixed(2)}.`;
-        alternativeSuggestion = `Você precisará de ${monthsToRecover} meses para recuperar o impacto na poupança.`;
-      } else {
-        recommendation = "✅ Compra recomendada: Não afetará significativamente suas finanças.";
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await response.text();
+      const parsedResponse = responseText ? safeParseJson(responseText) : null;
+
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(parsedResponse, response.status));
       }
 
-      setResult({
-        canAfford,
-        impactOnSavings,
-        monthsToRecover,
-        recommendation,
-        alternativeSuggestion,
+      setResult(parsedResponse ?? { mensagem: 'Webhook respondeu sem corpo.' });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao simular compra',
+        description: error?.message ?? 'Nao foi possivel consultar o workflow do n8n.',
+        variant: 'destructive',
       });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const resetSimulation = () => {
-    setPurchaseAmount("");
-    setPurchaseDescription("");
+    setPurchaseAmount('');
+    setPurchaseDescription('');
+    setInstallments('1');
     setResult(null);
+    setShowResultDetails(false);
   };
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-    });
-  };
-
-  const newBalance = result ? mockUserData.currentBalance - Number.parseFloat(purchaseAmount) : 0;
 
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>Simulador de Compras</Text>
         <Text style={styles.cardDescription}>
-          Analise o impacto de uma compra no seu orçamento
+          Envie os dados da compra para o workflow do n8n e veja a simulacao retornada
         </Text>
       </View>
-      
+
       <ScrollView style={styles.cardContent} showsVerticalScrollIndicator={false}>
-        {/* Formulário */}
         <View style={styles.formContainer}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Descrição da compra</Text>
+            <Text style={styles.label}>Descricao da compra</Text>
             <TextInput
               style={styles.input}
               placeholder="Ex: Notebook, Geladeira, Viagem..."
               value={purchaseDescription}
               onChangeText={setPurchaseDescription}
+              returnKeyType="done"
               placeholderTextColor="#999999"
             />
           </View>
@@ -109,97 +136,72 @@ export function PurchaseSimulator() {
               value={purchaseAmount}
               onChangeText={setPurchaseAmount}
               keyboardType="numeric"
+              returnKeyType="done"
               placeholderTextColor="#999999"
             />
           </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Parcelas</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="1"
+              value={installments}
+              onChangeText={(value) => setInstallments(value.replace(/\D/g, ''))}
+              keyboardType="numeric"
+              returnKeyType="done"
+              placeholderTextColor="#999999"
+            />
+          </View>
+
         </View>
 
-        {/* Botões */}
         <View style={styles.buttonsContainer}>
           <TouchableOpacity
             style={[
               styles.simulateButton,
-              (!purchaseAmount || isLoading) && styles.simulateButtonDisabled
+              !canSimulate && styles.simulateButtonDisabled,
             ]}
             onPress={simulatePurchase}
-            disabled={!purchaseAmount || isLoading}
+            disabled={!canSimulate}
           >
             <Text style={styles.simulateButtonText}>
-              {isLoading ? "Simulando..." : "Simular Compra"}
+              {isLoading ? 'Simulando...' : 'Simular Compra'}
             </Text>
           </TouchableOpacity>
-          
+
           {result && (
-            <TouchableOpacity
-              style={styles.resetButton}
-              onPress={resetSimulation}
-            >
-              <Text style={styles.resetButtonText}>Nova Simulação</Text>
+            <TouchableOpacity style={styles.resetButton} onPress={resetSimulation}>
+              <Text style={styles.resetButtonText}>Nova Simulacao</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Resultado */}
         {result && (
           <View style={styles.resultContainer}>
-            {/* Alerta principal */}
-            <View style={[
-              styles.alert,
-              result.canAfford ? styles.positiveAlert : styles.negativeAlert
-            ]}>
-              <Text style={styles.alertText}>{result.recommendation}</Text>
+            <View style={[styles.alert, styles.positiveAlert]}>
+              <Text style={styles.alertTitle}>Resultado do workflow</Text>
+              <Text style={styles.alertText}>Resumo da resposta retornada pelo n8n.</Text>
             </View>
 
-            {/* Sugestão alternativa */}
-            {result.alternativeSuggestion && (
-              <View style={styles.alert}>
-                <Text style={styles.alertText}>{result.alternativeSuggestion}</Text>
-              </View>
+            <View style={styles.responseContainer}>
+              {renderWorkflowResult(result)}
+            </View>
+
+            {hasWorkflowSimulation(result) && (
+              <>
+                <TouchableOpacity
+                  style={styles.detailsButton}
+                  onPress={() => setShowResultDetails((current) => !current)}
+                >
+                  <Text style={styles.detailsButtonText}>
+                    {showResultDetails ? 'Ocultar detalhes do calculo' : 'Ver detalhes do calculo'}
+                  </Text>
+                </TouchableOpacity>
+
+                {showResultDetails ? renderWorkflowSimulationDetails(result) : null}
+              </>
             )}
-
-            {/* Dados financeiros */}
-            <View style={styles.financialData}>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>Saldo após compra</Text>
-                <Text style={styles.dataValue}>
-                  R$ {formatCurrency(newBalance)}
-                </Text>
-              </View>
-
-              {result.impactOnSavings > 0 && (
-                <View style={styles.dataItem}>
-                  <Text style={styles.dataLabel}>Impacto na poupança</Text>
-                  <Text style={[styles.dataValue, styles.negativeValue]}>
-                    -R$ {formatCurrency(result.impactOnSavings)}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Informações adicionais */}
-            <View style={styles.additionalInfo}>
-              <Text style={styles.infoTitle}>Sua situação atual:</Text>
-              <View style={styles.infoGrid}>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Saldo atual</Text>
-                  <Text style={styles.infoValue}>R$ {formatCurrency(mockUserData.currentBalance)}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Meta de poupança</Text>
-                  <Text style={styles.infoValue}>R$ {formatCurrency(mockUserData.savingsGoal)}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Poupança atual</Text>
-                  <Text style={styles.infoValue}>R$ {formatCurrency(mockUserData.currentSavings)}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Sobra mensal</Text>
-                  <Text style={styles.infoValue}>
-                    R$ {formatCurrency(mockUserData.monthlyIncome - mockUserData.monthlyExpenses)}
-                  </Text>
-                </View>
-              </View>
-            </View>
           </View>
         )}
       </ScrollView>
@@ -207,161 +209,491 @@ export function PurchaseSimulator() {
   );
 }
 
+function parseCurrencyInput(value: string) {
+  const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function buildProjectionPayload(months: number) {
+  const transactionsResponse = await apiService.getTransactions().catch(() => []);
+  const recurringTransactions = (transactionsResponse ?? [])
+    .map((transaction: any, index: number) =>
+      normalizeFinancialTransaction(
+        {
+          id: transaction?.id ?? transaction?._id ?? transaction?.transactionId ?? index,
+          descricao: transaction?.descricao ?? transaction?.description,
+          valor: transaction?.valor ?? transaction?.amount ?? transaction?.value,
+          tipo: transaction?.tipo ?? transaction?.type,
+          recorrente:
+            transaction?.recorrente ??
+            transaction?.recurring ??
+            transaction?.isRecurring ??
+            transaction?.recorrencia,
+          data: transaction?.data ?? transaction?.date,
+          date: transaction?.date ?? transaction?.data,
+        },
+        index,
+      ),
+    )
+    .filter((transaction) => transaction.recorrente);
+
+  const firstMonth = startOfMonth(addMonths(new Date(), 1));
+
+  return Array.from({ length: months }, (_, index) => {
+    const monthDate = addMonths(firstMonth, index);
+    const monthTransactions = recurringTransactions.filter((transaction) => {
+      const transactionDate = getTransactionMonth(transaction);
+      return transactionDate ? isSameMonth(transactionDate, monthDate) : false;
+    });
+
+    const receitas = monthTransactions
+      .filter((transaction) => transaction.tipo === 'receita')
+      .reduce((total, transaction) => total + transaction.valor, 0);
+    const despesas = monthTransactions
+      .filter((transaction) => transaction.tipo === 'despesa')
+      .reduce((total, transaction) => total + transaction.valor, 0);
+
+    return {
+      mes: index + 1,
+      referencia: formatMonthReference(monthDate),
+      receitas: roundCurrency(receitas),
+      despesas: roundCurrency(despesas),
+      saldo_base: roundCurrency(receitas - despesas),
+    };
+  });
+}
+
+function parseMonthsInput(value: string) {
+  const normalized = value.replace(/\D/g, '');
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function safeParseJson(value: string): JsonValue {
+  try {
+    return JSON.parse(value) as JsonValue;
+  } catch {
+    return value;
+  }
+}
+
+function isJsonPrimitive(value: JsonValue): value is JsonPrimitive {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function extractErrorMessage(payload: JsonValue, status: number) {
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload;
+  }
+
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const candidate = payload.message ?? payload.error ?? payload.mensagem;
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+
+  return `O webhook respondeu com erro ${status}.`;
+}
+
+function renderJsonValue(value: JsonValue, label?: string): React.ReactNode {
+  if (Array.isArray(value)) {
+    return (
+      <View style={styles.jsonSection}>
+        {label ? <Text style={styles.jsonLabel}>{formatJsonKey(label)}</Text> : null}
+        {value.length === 0 ? (
+          <Text style={styles.jsonPrimitive}>[]</Text>
+        ) : (
+          value.map((item, index) => (
+            <View key={`${label ?? 'item'}-${index}`} style={styles.jsonNestedBlock}>
+              {renderJsonValue(item, `Item ${index + 1}`)}
+            </View>
+          ))
+        )}
+      </View>
+    );
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+
+    return (
+      <View style={styles.jsonSection}>
+        {label ? <Text style={styles.jsonLabel}>{formatJsonKey(label)}</Text> : null}
+        {entries.map(([entryKey, entryValue]) => {
+          if (isJsonPrimitive(entryValue)) {
+            return (
+              <View key={entryKey} style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{formatJsonKey(entryKey)}</Text>
+                <Text style={styles.detailValue}>{formatPrimitive(entryValue)}</Text>
+              </View>
+            );
+          }
+
+          return (
+            <View key={entryKey} style={styles.jsonNestedBlock}>
+              {renderJsonValue(entryValue, entryKey)}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.jsonSection}>
+      {label ? <Text style={styles.jsonLabel}>{formatJsonKey(label)}</Text> : null}
+      <Text style={styles.jsonPrimitive}>{formatPrimitive(value)}</Text>
+    </View>
+  );
+}
+
+function renderWorkflowResult(value: JsonValue): React.ReactNode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return renderJsonValue(value);
+  }
+
+  const record = value as Record<string, JsonValue>;
+  const preferredFields = [
+    'valor_compra',
+    'meses',
+    'valor_parcela',
+    'saldo_inicial',
+    'status_final',
+    'impacto',
+    'recomendacao',
+    'mensagem',
+  ];
+
+  const summaryEntries: [string, JsonPrimitive][] = [];
+
+  preferredFields.forEach((field) => {
+    const entryValue = record[field];
+    if (isJsonPrimitive(entryValue)) {
+      summaryEntries.push([field, entryValue] as const);
+    }
+  });
+
+  if (summaryEntries.length === 0) {
+    return renderJsonValue(value);
+  }
+
+  return (
+    <View style={styles.jsonSection}>
+      {summaryEntries.map(([entryKey, entryValue]) => (
+        <View key={entryKey} style={styles.detailRow}>
+          <Text style={styles.detailLabel}>{formatJsonKey(entryKey)}</Text>
+          <Text style={styles.detailValue}>{formatPrimitive(entryValue)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function hasWorkflowSimulation(value: JsonValue) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const simulation = (value as Record<string, JsonValue>).simulacao;
+  return Array.isArray(simulation) && simulation.length > 0;
+}
+
+function renderWorkflowSimulationDetails(value: JsonValue): React.ReactNode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const simulation = (value as Record<string, JsonValue>).simulacao;
+  if (!Array.isArray(simulation) || simulation.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.detailsContainer}>
+      <Text style={styles.detailsTitle}>Detalhes do calculo</Text>
+      {simulation.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return null;
+        }
+
+        const record = item as Record<string, JsonValue>;
+        const fields = [
+          ['mes', record.mes],
+          ['referencia', record.referencia],
+          ['receitas', record.receitas],
+          ['despesas', record.despesas],
+          ['saldo_base', record.saldo_base],
+          ['parcela', record.parcela],
+          ['saldo_final', record.saldo_final],
+          ['status', record.status],
+        ].filter((entry): entry is [string, JsonPrimitive] => isJsonPrimitive(entry[1]));
+
+        return (
+          <View key={`simulation-${index}`} style={styles.detailCard}>
+            <Text style={styles.detailCardTitle}>Mes {index + 1}</Text>
+            {fields.map(([entryKey, entryValue]) => (
+              <View key={entryKey} style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{formatJsonKey(entryKey)}</Text>
+                <Text style={styles.detailValue}>{formatPrimitive(entryValue)}</Text>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function formatPrimitive(value: JsonPrimitive) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return String(value);
+  return value;
+}
+
+function formatJsonKey(key: string) {
+  return key.replace(/_/g, ' ');
+}
+
+function roundCurrency(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function getTransactionMonth(transaction: ReturnType<typeof normalizeFinancialTransaction>) {
+  const rawDate = transaction.date ?? transaction.data;
+  if (!rawDate) return null;
+
+  const parsed = new Date(rawDate);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return startOfMonth(parsed);
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function isSameMonth(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
+}
+
+function formatMonthReference(date: Date) {
+  return date.toLocaleDateString('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  }).replace('.', '');
+}
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 24,
     margin: 8,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(186, 201, 213, 0.6)',
+    shadowColor: '#10233f',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
   },
   cardHeader: {
-    padding: 20,
+    padding: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#dbe5ec',
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: '700',
+    color: '#10233f',
     marginBottom: 4,
   },
   cardDescription: {
     fontSize: 14,
-    color: '#666666',
+    color: '#6b7a90',
+    lineHeight: 20,
   },
   cardContent: {
-    padding: 20,
+    padding: 24,
+    paddingTop: 18,
   },
   formContainer: {
-    gap: 16,
-    marginBottom: 20,
+    gap: 14,
+    marginBottom: 18,
   },
   formGroup: {
     gap: 8,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#24364d',
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fbfd',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: '#d7e2ea',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     fontSize: 16,
-    color: '#000000',
+    color: '#10233f',
   },
   buttonsContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 18,
   },
   simulateButton: {
     flex: 1,
-    backgroundColor: '#000000',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#10233f',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#10233f',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
   },
   simulateButtonDisabled: {
-    backgroundColor: '#cccccc',
+    backgroundColor: '#c7d2dd',
   },
   simulateButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   resetButton: {
-    backgroundColor: 'transparent',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: '#d7e2ea',
   },
   resetButtonText: {
-    color: '#666666',
-    fontSize: 16,
+    color: '#5f7086',
+    fontSize: 15,
     fontWeight: '600',
   },
   resultContainer: {
-    gap: 16,
-    paddingTop: 16,
+    gap: 12,
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: '#dbe5ec',
   },
   alert: {
-    backgroundColor: '#f8f8f8',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#f7fafc',
+    padding: 14,
+    borderRadius: 16,
     borderLeftWidth: 4,
   },
   positiveAlert: {
-    borderLeftColor: '#16a34a', // chart-3 - green
+    borderLeftColor: '#16a34a',
   },
-  negativeAlert: {
-    borderLeftColor: '#dc2626', // destructive - red
+  alertTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#10233f',
+    marginBottom: 4,
   },
   alertText: {
-    fontSize: 14,
-    color: '#000000',
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#5f7086',
+    lineHeight: 19,
   },
-  financialData: {
+  responseContainer: {
+    gap: 10,
+    padding: 14,
+    backgroundColor: '#f8fbfd',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#dde7ee',
+  },
+  jsonSection: {
+    gap: 8,
+  },
+  jsonLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10233f',
+    textTransform: 'capitalize',
+  },
+  jsonNestedBlock: {
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: '#d7e2ea',
+  },
+  jsonPrimitive: {
+    fontSize: 13,
+    color: '#516275',
+    lineHeight: 19,
+  },
+  detailRow: {
     flexDirection: 'row',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  dataItem: {
-    flex: 1,
-    minWidth: '45%',
-    gap: 4,
-  },
-  dataLabel: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  dataValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-  },
-  negativeValue: {
-    color: '#dc2626',
-  },
-  additionalInfo: {
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     gap: 12,
-    padding: 16,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
+    paddingVertical: 2,
   },
-  infoTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  infoItem: {
+  detailLabel: {
     flex: 1,
-    minWidth: '45%',
-    gap: 2,
+    fontSize: 13,
+    color: '#506174',
+    textTransform: 'capitalize',
   },
-  infoLabel: {
-    fontSize: 12,
-    color: '#666666',
+  detailValue: {
+    flex: 1,
+    fontSize: 13,
+    color: '#10233f',
+    fontWeight: '700',
+    textAlign: 'right',
   },
-  infoValue: {
-    fontSize: 14,
+  detailsButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#d7e2ea',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  detailsButtonText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#000000',
+    color: '#10233f',
+  },
+  detailsContainer: {
+    gap: 10,
+  },
+  detailsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#10233f',
+  },
+  detailCard: {
+    gap: 8,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dde7ee',
+  },
+  detailCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10233f',
   },
 });

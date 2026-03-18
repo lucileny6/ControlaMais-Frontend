@@ -15,6 +15,7 @@ interface TransactionFormData {
   category: string;
   date: string;
   notes?: string;
+  recorrente: boolean;
 }
 
 const normalizeDateToIso = (value: string) => {
@@ -52,6 +53,8 @@ export default function NewTransactionPage() {
           categoria: data.category,
           data: normalizeDateToIso(data.date),
           observacao: data.notes,
+          recorrente: data.recorrente,
+          recurring: data.recorrente,
         });
       } else {
         await apiService.createReceita({
@@ -60,6 +63,8 @@ export default function NewTransactionPage() {
           categoria: data.category,
           data: normalizeDateToIso(data.date),
           observacao: data.notes,
+          recorrente: data.recorrente,
+          recurring: data.recorrente,
         });
       }
 

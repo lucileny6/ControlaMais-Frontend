@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AIResponse } from "@/lib/types";
+import { AIResponse, LoginResponse, User as AuthUser } from "@/lib/types";
 
 
 /* =====================================================
@@ -19,6 +19,10 @@ export interface User {
   email: string;
 }
 
+export interface AuthResponse extends Omit<LoginResponse, "user"> {
+  user?: AuthUser;
+}
+
 // ===== RECEITA =====
 
 export interface CreateReceitaDTO {
@@ -27,6 +31,8 @@ export interface CreateReceitaDTO {
   categoria: string;
   descricao: string;
   observacao?: string;
+  recorrente?: boolean;
+  recurring?: boolean;
 }
 
 // ===== DESPESA =====
@@ -37,6 +43,8 @@ export interface CreateDespesaDTO {
   categoria: string;
   descricao: string;
   observacao?: string;
+  recorrente?: boolean;
+  recurring?: boolean;
 }
 
 export interface UpdateTransactionDTO {
@@ -45,6 +53,8 @@ export interface UpdateTransactionDTO {
   categoria: string;
   data: string;
   observacao?: string;
+  recorrente?: boolean;
+  recurring?: boolean;
   type?: "income" | "expense";
   tipo?: "income" | "expense" | "receita" | "despesa";
 }
@@ -190,15 +200,15 @@ export class ApiService {
      AUTH
   ====================== */
 
-  async login(email: string, password: string) {
-    return this.request("/users/login", {
+  async login(email: string, password: string): Promise<AuthResponse> {
+    return this.request<AuthResponse>("/users/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
   }
 
-  async register(name: string, email: string, password: string) {
-    return this.request("/users/register", {
+  async register(name: string, email: string, password: string): Promise<AuthResponse> {
+    return this.request<AuthResponse>("/users/register", {
       method: "POST",
       body: JSON.stringify({ username: name, email, password }),
     });
@@ -220,6 +230,7 @@ export class ApiService {
   ====================== */
 
   async createReceita(dto: CreateReceitaDTO) {
+    console.log("[API] createReceita payload:", dto);
     return this.request("/receitas", {
       method: "POST",
       body: JSON.stringify(dto),
@@ -227,6 +238,7 @@ export class ApiService {
   }
 
   async createDespesa(dto: CreateDespesaDTO) {
+    console.log("[API] createDespesa payload:", dto);
     return this.request("/despesas", {
       method: "POST",
       body: JSON.stringify(dto),
@@ -249,6 +261,7 @@ export class ApiService {
     let lastError: Error | null = null;
     for (const endpoint of endpoints) {
       try {
+        console.log("[API] updateTransaction payload:", { endpoint, dto, transactionType });
         return await this.request(endpoint, {
           method: "PUT",
           body: JSON.stringify(dto),
@@ -369,7 +382,16 @@ export class ApiService {
     try {
       const response = await this.request<any>("/transacoes");
       console.log("[API] GET /transacoes raw:", response);
-      return extractList(response);
+      const extracted = extractList(response);
+      console.log("[API] GET /transacoes extracted recurring fields:", extracted.map((item: any) => ({
+        id: item?.id ?? item?._id ?? item?.transactionId,
+        descricao: item?.descricao ?? item?.description,
+        recorrente: item?.recorrente,
+        recurring: item?.recurring,
+        isRecurring: item?.isRecurring,
+        recorrencia: item?.recorrencia,
+      })));
+      return extracted;
     } catch (error) {
       const message = String((error as any)?.message ?? "");
       if (message.includes("403") || message.includes("401") || message.toLowerCase().includes("sessao")) {
@@ -378,7 +400,16 @@ export class ApiService {
       console.log("[API] GET /transacoes failed, trying /transaction:", error);
       const response = await this.request<any>("/transaction");
       console.log("[API] GET /transaction raw:", response);
-      return extractList(response);
+      const extracted = extractList(response);
+      console.log("[API] GET /transaction extracted recurring fields:", extracted.map((item: any) => ({
+        id: item?.id ?? item?._id ?? item?.transactionId,
+        descricao: item?.descricao ?? item?.description,
+        recorrente: item?.recorrente,
+        recurring: item?.recurring,
+        isRecurring: item?.isRecurring,
+        recorrencia: item?.recorrencia,
+      })));
+      return extracted;
     }
   }
 
@@ -423,13 +454,63 @@ export class ApiService {
 
   async getMetas(): Promise<GoalDTO[]> {
     const response = await this.request<any>("/metas", { preserveSessionOnAuthError: true });
-    const payload = response?.data ?? response;
+    console.log("[API] GET /metas raw:", response);
 
-    if (Array.isArray(payload)) return payload as GoalDTO[];
-    if (Array.isArray(payload?.metas)) return payload.metas as GoalDTO[];
-    if (Array.isArray(payload?.items)) return payload.items as GoalDTO[];
+    const isLikelyGoal = (value: unknown) => {
+      if (!value || typeof value !== "object") return false;
+      const item = value as Record<string, unknown>;
 
-    return [];
+      const hasGoalName =
+        typeof item.nome === "string" ||
+        typeof item.titulo === "string" ||
+        typeof item.title === "string";
+
+      const hasGoalAmount =
+        item.valorMeta !== undefined ||
+        item.targetAmount !== undefined ||
+        item.valorAtual !== undefined ||
+        item.currentAmount !== undefined;
+
+      const hasGoalDate =
+        typeof item.prazo === "string" ||
+        typeof item.deadline === "string";
+
+      return hasGoalName || hasGoalAmount || hasGoalDate;
+    };
+
+    const findGoalArray = (value: unknown, depth = 0): GoalDTO[] | null => {
+      if (depth > 4 || value == null) return null;
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) return value as GoalDTO[];
+
+        const looksLikeGoalList = value.every((item) => isLikelyGoal(item));
+        if (looksLikeGoalList) return value as GoalDTO[];
+        return null;
+      }
+
+      if (typeof value !== "object") return null;
+
+      const record = value as Record<string, unknown>;
+      const priorityKeys = ["data", "metas", "items", "content", "goals", "result", "payload"];
+
+      for (const key of priorityKeys) {
+        if (!(key in record)) continue;
+        const found = findGoalArray(record[key], depth + 1);
+        if (found) return found;
+      }
+
+      for (const nestedValue of Object.values(record)) {
+        const found = findGoalArray(nestedValue, depth + 1);
+        if (found) return found;
+      }
+
+      return null;
+    };
+
+    const extracted = findGoalArray(response) ?? findGoalArray(response?.data) ?? [];
+    console.log("[API] GET /metas extracted list:", extracted);
+    return extracted;
   }
 
   async createMeta(dto: CreateMetaDTO): Promise<GoalDTO> {

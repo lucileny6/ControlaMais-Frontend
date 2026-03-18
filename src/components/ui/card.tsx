@@ -1,15 +1,24 @@
 import React from "react";
-import { StyleSheet, Text, TextStyle, View, ViewProps, ViewStyle } from "react-native";
+import {
+    StyleProp,
+    StyleSheet,
+    Text,
+    TextProps as RNTextProps,
+    TextStyle,
+    View,
+    ViewProps,
+    ViewStyle
+} from "react-native";
 
 interface CardProps extends ViewProps {
     children: React.ReactNode;
-    style?: ViewStyle;
+    style?: StyleProp<ViewStyle>;
     maxWidth?: number;
 }
 
-interface TextProps {
+interface TextProps extends RNTextProps {
     children: React.ReactNode;
-    style?: TextStyle;
+    style?: StyleProp<TextStyle>;
 }
 
 function Card({ children, style, maxWidth = 500, ...props }: CardProps) {

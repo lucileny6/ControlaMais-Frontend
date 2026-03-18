@@ -110,6 +110,21 @@ export interface Goal {
  */
 export type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
 
+export interface AITransactionAction {
+  tipo?: "RECEITA" | "DESPESA" | "income" | "expense";
+  type?: "RECEITA" | "DESPESA" | "income" | "expense";
+  valor?: number | string;
+  amount?: number | string;
+  categoria?: string;
+  category?: string;
+  descricao?: string;
+  description?: string;
+  data?: string;
+  date?: string;
+  recorrente?: boolean;
+  recurring?: boolean;
+}
+
 /**
  * Resposta da IA vinda do BACKEND
  * ⚠️ NÃO existe objeto de ação aqui
@@ -117,4 +132,6 @@ export type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
 export interface AIResponse {
   tipo: "TEXTO" | "CONFIRMACAO";
   mensagem: string;
+  acao?: AITransactionAction;
+  action?: AITransactionAction;
 }
