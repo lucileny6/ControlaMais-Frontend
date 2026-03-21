@@ -47,7 +47,9 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
   const [pendingAction, setPendingAction] = useState<AITransactionAction | null>(null);
+  const [pendingConfirmationData, setPendingConfirmationData] = useState<Record<string, unknown> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const hasPendingConfirmationData = pendingConfirmationData !== null;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -82,13 +84,16 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, iaMessage]);
       setAguardandoConfirmacao(response.tipo === "CONFIRMACAO");
+      setPendingConfirmationData(response.dados ?? null);
       setPendingAction(response.acao ?? response.action ?? null);
-    } catch {
+    } catch (error: any) {
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
-          content: "Erro ao comunicar com o servidor",
+          content: String(
+            error?.message ?? "Erro ao comunicar com o workflow do chat.",
+          ),
           isUser: false,
           timestamp: new Date(),
         },
@@ -99,16 +104,14 @@ export default function ChatPage() {
   };
 
   const createTransactionFromAction = async (action: AITransactionAction) => {
-    const rawType = String(action.tipo ?? action.type ?? "").trim().toLowerCase();
-    const normalizedType = rawType === "receita" || rawType === "income" ? "income" : "expense";
-    const amount = Number(action.valor ?? action.amount ?? 0);
+    const normalizedType = normalizeTransactionType(action);
     const payload = {
       descricao: String(action.descricao ?? action.description ?? "Lancamento via chat").trim(),
-      valor: Number.isFinite(amount) ? amount : 0,
+      valor: parseCurrencyValue(action.valor ?? action.amount),
       categoria: String(action.categoria ?? action.category ?? "Sem categoria").trim(),
-      data: String(action.data ?? action.date ?? new Date().toISOString().split("T")[0]).trim(),
-      recorrente: Boolean(action.recorrente ?? action.recurring),
-      recurring: Boolean(action.recorrente ?? action.recurring),
+      data: normalizeDateValue(action.data ?? action.date),
+      recorrente: parseBooleanValue(action.recorrente ?? action.recurring),
+      recurring: parseBooleanValue(action.recorrente ?? action.recurring),
     };
 
     if (!payload.descricao || payload.valor <= 0 || !payload.categoria || !payload.data) {
@@ -130,6 +133,8 @@ export default function ChatPage() {
       handleSendMessage("sim");
       return;
     }
+
+    appendUserSystemChoice("Confirmar");
 
     setIsLoading(true);
     void createTransactionFromAction(pendingAction)
@@ -157,6 +162,7 @@ export default function ChatPage() {
       })
       .finally(() => {
         setPendingAction(null);
+        setPendingConfirmationData(null);
         setIsLoading(false);
       });
   };
@@ -164,7 +170,20 @@ export default function ChatPage() {
   const cancelar = () => {
     setAguardandoConfirmacao(false);
     setPendingAction(null);
+    setPendingConfirmationData(null);
     handleSendMessage("cancelar");
+  };
+
+  const appendUserSystemChoice = (content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${content}`,
+        content,
+        isUser: true,
+        timestamp: new Date(),
+      },
+    ]);
   };
 
   return (
@@ -210,7 +229,11 @@ export default function ChatPage() {
 
                 {aguardandoConfirmacao && (
                   <View style={styles.confirmBox}>
-                    <Text style={styles.confirmText}>Deseja confirmar a acao sugerida pelo chat?</Text>
+                    <Text style={styles.confirmText}>
+                      {hasPendingConfirmationData
+                        ? "Deseja confirmar os dados retornados pelo chat?"
+                        : "Deseja confirmar a acao sugerida pelo chat?"}
+                    </Text>
 
                     <View style={styles.confirmButtons}>
                       <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
@@ -238,6 +261,88 @@ export default function ChatPage() {
       </View>
     </LinearGradient>
   );
+}
+
+function normalizeTransactionType(action: AITransactionAction) {
+  const rawType = String(action.tipo ?? action.type ?? "").trim().toLowerCase();
+  return ["receita", "income", "entrada", "ganho"].includes(rawType) ? "income" : "expense";
+}
+
+function parseCurrencyValue(value: string | number | undefined) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const raw = value.trim();
+  if (!raw) {
+    return 0;
+  }
+
+  const cleaned = raw.replace(/[^\d,.-]/g, "");
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    const normalized =
+      lastComma > lastDot
+        ? cleaned.replace(/\./g, "").replace(",", ".")
+        : cleaned.replace(/,/g, "");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (hasComma) {
+    const parsed = Number(cleaned.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseBooleanValue(value: boolean | string | undefined) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return ["true", "1", "sim", "yes"].includes(value.trim().toLowerCase());
+}
+
+function normalizeDateValue(value: string | undefined) {
+  if (!value) {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    const [day, month, year] = trimmed.split("/");
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  return parsed.toISOString().split("T")[0];
 }
 
 const styles = StyleSheet.create({

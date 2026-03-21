@@ -132,6 +132,7 @@ export interface AITransactionAction {
 export interface AIResponse {
   tipo: "TEXTO" | "CONFIRMACAO";
   mensagem: string;
+  dados?: Record<string, unknown>;
   acao?: AITransactionAction;
   action?: AITransactionAction;
 }
