@@ -18,7 +18,13 @@ const fallbackMonthlyData: MonthlyChartPoint[] = [
   { month: 'Jun', receitas: 3600, despesas: 2400 },
 ];
 
-export function IncomeExpenseChart({ data }: { data?: MonthlyChartPoint[] }) {
+export function IncomeExpenseChart({
+  data,
+  description,
+}: {
+  data?: MonthlyChartPoint[];
+  description?: string;
+}) {
   const monthlyData = data && data.length > 0 ? data : fallbackMonthlyData;
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
@@ -44,7 +50,7 @@ export function IncomeExpenseChart({ data }: { data?: MonthlyChartPoint[] }) {
       <CardHeader>
         <CardTitle>Receitas vs Despesas</CardTitle>
         <CardDescription>
-          Comparacao mensal de janeiro a junho
+          {description || "Comparacao mensal de janeiro a junho"}
         </CardDescription>
       </CardHeader>
 

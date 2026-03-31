@@ -111,7 +111,7 @@ export interface UpdateMetaDTO {
 ===================================================== */
 
 export class ApiService {
-  private baseUrl = "http://localhost:8080/api";
+  private baseUrl = resolveApiBaseUrl();
 
   private typeSafeRequestOptions(options: RequestInit & { preserveSessionOnAuthError?: boolean }) {
     const { preserveSessionOnAuthError, ...requestOptions } = options;
@@ -537,12 +537,35 @@ export class ApiService {
   }
 
   async sendChatIA(message: string): Promise<AIResponse> {
-  return this.request<AIResponse>("/chat-ia", {
-    method: "POST",
-    body: JSON.stringify({
+    const payload = JSON.stringify({
       mensagem: message,
-      }),
     });
+
+    const configuredEndpoint = normalizeEndpointPath(process.env.EXPO_PUBLIC_CHAT_API_PATH);
+    const endpoints = Array.from(
+      new Set(
+        [configuredEndpoint, "/chat-ia", "/chat"]
+          .filter((endpoint): endpoint is string => Boolean(endpoint)),
+      ),
+    );
+
+    let lastError: Error | null = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        return await this.request<AIResponse>(endpoint, {
+          method: "POST",
+          body: payload,
+        });
+      } catch (error: any) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (!lastError.message.includes("404")) {
+          throw lastError;
+        }
+      }
+    }
+
+    throw lastError ?? new Error("Nao foi possivel consultar o endpoint do chat no backend.");
   }
 }
 
@@ -551,4 +574,33 @@ export class ApiService {
 ===================================================== */
 
 export const apiService = new ApiService();
+
+function resolveApiBaseUrl() {
+  const configuredBaseUrl =
+    process.env.EXPO_PUBLIC_API_URL ??
+    process.env.EXPO_PUBLIC_BACKEND_API_URL ??
+    process.env.EXPO_PUBLIC_BACKEND_URL;
+
+  if (!configuredBaseUrl) {
+    return "http://localhost:8080/api";
+  }
+
+  const normalizedBaseUrl = configuredBaseUrl.trim().replace(/\/+$/, "");
+  if (!normalizedBaseUrl) {
+    return "http://localhost:8080/api";
+  }
+
+  return /\/api$/i.test(normalizedBaseUrl)
+    ? normalizedBaseUrl
+    : `${normalizedBaseUrl}/api`;
+}
+
+function normalizeEndpointPath(endpoint: string | undefined) {
+  const normalizedEndpoint = endpoint?.trim();
+  if (!normalizedEndpoint) {
+    return undefined;
+  }
+
+  return normalizedEndpoint.startsWith("/") ? normalizedEndpoint : `/${normalizedEndpoint}`;
+}
 

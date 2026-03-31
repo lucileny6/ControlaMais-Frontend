@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -29,6 +28,8 @@ interface TransactionListProps {
   initialStartDate?: string;
   initialEndDate?: string;
   periodSyncToken?: number;
+  periodLabel?: string;
+  onOpenPeriodPicker?: () => void;
   onFilteredDataChange?: (filtered: Transaction[]) => void;
   onExportContextChange?: (context: {
     filtered: Transaction[];
@@ -46,6 +47,8 @@ export function TransactionList({
   initialStartDate = "",
   initialEndDate = "",
   periodSyncToken = 0,
+  periodLabel = "",
+  onOpenPeriodPicker,
   onFilteredDataChange,
   onExportContextChange,
 }: TransactionListProps) {
@@ -60,8 +63,12 @@ export function TransactionList({
     return raw;
   };
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">(
+    "all",
+
+
+  );
+  const [filterRecurrence, setFilterRecurrence] = useState<"all" | "normal" | "recurring">(
     "all",
   );
   const [filterCategory, setFilterCategory] = useState("all");
@@ -125,13 +132,12 @@ export function TransactionList({
   };
 
   const filteredTransactions = transactions.filter((transaction) => {
-    const description = String(transaction?.description ?? "");
     const type = transaction?.type ?? "expense";
     const category = String(transaction?.category ?? "");
-    const matchesSearch = description
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
     const matchesType = filterType === "all" || type === filterType;
+    const matchesRecurrence =
+      filterRecurrence === "all" ||
+      (filterRecurrence === "recurring" ? Boolean(transaction?.recorrente) : !transaction?.recorrente);
     const matchesCategory =
       filterCategory === "all" ||
       normalizeCategory(category) === normalizeCategory(filterCategory);
@@ -167,7 +173,7 @@ export function TransactionList({
       return matchesStartDate && matchesEndDate;
     })();
 
-    return matchesSearch && matchesType && matchesCategory && matchesDate;
+    return matchesType && matchesRecurrence && matchesCategory && matchesDate;
   });
 
   const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
@@ -199,6 +205,7 @@ export function TransactionList({
   }, [
     sortedFilteredTransactions,
     filterType,
+    filterRecurrence,
     totalIncome,
     totalExpense,
     balance,
@@ -206,19 +213,23 @@ export function TransactionList({
   ]);
 
   const categories = Array.from(
-    new Set(
-      transactions
-        .map((t) => String(t?.category ?? "").trim())
-        .filter((category) => category.length > 0),
-    ),
+    transactions.reduce((acc, transaction) => {
+      const rawCategory = String(transaction?.category ?? "").trim();
+      if (!rawCategory) return acc;
+
+      const normalizedKey = normalizeCategory(rawCategory);
+      if (!acc.has(normalizedKey)) {
+        acc.set(normalizedKey, rawCategory);
+      }
+
+      return acc;
+    }, new Map<string, string>()).values(),
   );
 
   const clearFilters = () => {
-    setSearchTerm("");
-    setStartDate("");
-    setEndDate("");
     setFilterCategory("all");
     setFilterType("all");
+    setFilterRecurrence("all");
   };
 
   const formatCurrency = (amount: number) => {
@@ -388,31 +399,17 @@ export function TransactionList({
           contentContainerStyle={styles.toolbarRow}
         >
           <View style={styles.toolbarItem}>
-            <Text style={styles.toolbarLabel}>Buscar</Text>
-            <TextInput
-              style={styles.toolbarInput}
-              placeholder="Descricao..."
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-            />
-          </View>
-
-          <View style={styles.toolbarItem}>
-            <Text style={styles.toolbarLabel}>Periodo</Text>
-            <View style={styles.toolbarPeriodRow}>
-              <TextInput
-                style={styles.toolbarDateInput}
-                placeholder="Inicio (MM-AAAA)"
-                value={startDate}
-                onChangeText={setStartDate}
-              />
-              <TextInput
-                style={styles.toolbarDateInput}
-                placeholder="Fim (MM-AAAA)"
-                value={endDate}
-                onChangeText={setEndDate}
-              />
-            </View>
+            <Text style={styles.toolbarLabel}>Período</Text>
+            <TouchableOpacity
+              style={styles.toolbarSelect}
+              onPress={onOpenPeriodPicker}
+              disabled={!onOpenPeriodPicker}
+            >
+              <Text style={styles.toolbarSelectText}>
+                {periodLabel || "Selecionar mês/ano"}
+              </Text>
+              <Text style={styles.toolbarSelectArrow}>▼</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.toolbarItem}>
@@ -422,8 +419,9 @@ export function TransactionList({
               onPress={() => setCategoryPickerOpen(true)}
             >
               <Text style={styles.toolbarSelectText}>
-                {filterCategory === "all" ? "Todas" : filterCategory}
+                {filterCategory === "all" ? "Selecionar categoria" : filterCategory}
               </Text>
+              <Text style={styles.toolbarSelectArrow}>▼</Text>
             </TouchableOpacity>
           </View>
 
@@ -476,6 +474,60 @@ export function TransactionList({
                   ]}
                 >
                   Despesas
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.toolbarItem}>
+            <Text style={styles.toolbarLabel}>Recorrência</Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  filterRecurrence === "all" && styles.typeButtonActive,
+                ]}
+                onPress={() => setFilterRecurrence("all")}
+              >
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterRecurrence === "all" && styles.typeButtonTextActive,
+                  ]}
+                >
+                  Todos
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  filterRecurrence === "normal" && styles.typeButtonActive,
+                ]}
+                onPress={() => setFilterRecurrence("normal")}
+              >
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterRecurrence === "normal" && styles.typeButtonTextActive,
+                  ]}
+                >
+                  Normais
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  filterRecurrence === "recurring" && styles.typeButtonActive,
+                ]}
+                onPress={() => setFilterRecurrence("recurring")}
+              >
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    filterRecurrence === "recurring" && styles.typeButtonTextActive,
+                  ]}
+                >
+                  Recorrentes
                 </Text>
               </TouchableOpacity>
             </View>
@@ -654,32 +706,8 @@ const styles = StyleSheet.create({
   },
   toolbarLabel: {
     fontSize: 10,
-    color: "#FFFFFF",
+    color: "#64748b",
     fontWeight: "600",
-  },
-  toolbarInput: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    fontSize: 12,
-    minWidth: 156,
-  },
-  toolbarPeriodRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  toolbarDateInput: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    fontSize: 12,
-    minWidth: 82,
   },
   toolbarSelect: {
     backgroundColor: "#ffffff",
@@ -688,12 +716,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    minWidth: 120,
+    minWidth: 168,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   toolbarSelectText: {
     fontSize: 12,
     color: "#0f172a",
     fontWeight: "500",
+    flexShrink: 1,
+  },
+  toolbarSelectArrow: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "700",
   },
   typeRow: {
     flexDirection: "row",

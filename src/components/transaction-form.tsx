@@ -22,6 +22,7 @@ export interface TransactionFormData {
   date: string;
   notes?: string;
   recorrente: boolean;
+  recurrenceMonths?: number;
 }
 
 interface TransactionFormProps {
@@ -38,6 +39,7 @@ CATEGORIAS
 const incomeCategories = ["Salário", "Comissão", "Renda extra"];
 
 const expenseCategories = [
+  "Investimento",
   "Moradia",
   "Supermercado",
   "Restaurante",
@@ -59,6 +61,24 @@ const expenseCategories = [
   "Assinaturas",
   "Tecnologia",
 ];
+
+expenseCategories.splice(
+  0,
+  expenseCategories.length,
+  "Investimento",
+  "Moradia",
+  "Alimentacao",
+  "Restaurante",
+  "Transporte",
+  "Saude",
+  "Lazer",
+  "Compras",
+  "Educacao",
+  "Pets",
+  "Assinaturas",
+  "Tecnologia",
+  "Outros",
+);
 
 /* ==============================
    COMPONENTE
@@ -89,6 +109,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     return raw;
   };
 
+  const getInitialRecurrenceMonths = (data?: Partial<TransactionFormData>) => {
+    if (!data?.recorrente) return "";
+
+    const parsed = Math.floor(Number(data.recurrenceMonths ?? 12));
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return "12";
+    }
+
+    return String(parsed);
+  };
+
   const [formData, setFormData] = useState({
     description: initialData?.description || "",
     amount: initialData?.amount?.toString() || "",
@@ -97,6 +128,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     date: formatDateForDisplay(initialData?.date),
     notes: initialData?.notes || "",
     recorrente: initialData?.recorrente ?? false,
+    recurrenceMonths: getInitialRecurrenceMonths(initialData),
   });
 
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -111,11 +143,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       date: formatDateForDisplay(initialData?.date),
       notes: initialData?.notes || "",
       recorrente: initialData?.recorrente ?? false,
+      recurrenceMonths: getInitialRecurrenceMonths(initialData),
     });
   }, [initialData]);
 
   const categories =
-    formData.type === "income" ? incomeCategories : expenseCategories;
+    formData.type === "income"
+      ? incomeCategories
+      : expenseCategories;
   const handleExitCategoryPicker = () => {
     setShowCategoryPicker(false);
   };
@@ -142,6 +177,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    const recurrenceMonths = Math.floor(Number(formData.recurrenceMonths));
+    if (formData.recorrente && (!Number.isFinite(recurrenceMonths) || recurrenceMonths < 1)) {
+      Alert.alert("Erro", "Informe uma quantidade de meses maior que zero para a recorrencia.");
+      return;
+    }
+
     onSubmit({
       description: formData.description,
       amount,
@@ -150,6 +191,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       date: formData.date,
       notes: formData.notes,
       recorrente: formData.recorrente,
+      recurrenceMonths: formData.recorrente ? recurrenceMonths : undefined,
     });
   };
 
@@ -236,6 +278,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               setFormData((previous) => ({
                 ...previous,
                 recorrente: !previous.recorrente,
+                recurrenceMonths: !previous.recorrente
+                  ? previous.recurrenceMonths || "12"
+                  : previous.recurrenceMonths,
               }))
             }
           >
@@ -253,6 +298,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             </View>
           </TouchableOpacity>
         </View>
+
+        {formData.recorrente && (
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Quantidade de meses</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ex.: 3"
+              keyboardType="number-pad"
+              value={formData.recurrenceMonths}
+              onChangeText={(value) =>
+                setFormData((previous) => ({
+                  ...previous,
+                  recurrenceMonths: value.replace(/[^\d]/g, ""),
+                }))
+              }
+            />
+            <Text style={styles.fieldHint}>
+              Inclui o mes informado na data. Ex.: 3 cria este mes e mais 2 proximos.
+            </Text>
+          </View>
+        )}
 
         {/* SALVAR */}
         <TouchableOpacity
@@ -417,6 +483,12 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   recurringDescription: {
+    fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 17,
+  },
+  fieldHint: {
+    marginTop: 6,
     fontSize: 12,
     color: "#6b7280",
     lineHeight: 17,

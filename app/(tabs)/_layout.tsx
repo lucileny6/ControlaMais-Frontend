@@ -1,67 +1,63 @@
-﻿// app/(tabs)/_layout.tsx
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Text, useWindowDimensions } from 'react-native';
+import { Tabs } from "expo-router";
+import React from "react";
+import { Text, useWindowDimensions } from "react-native";
 
 export default function TabLayout() {
   const { width } = useWindowDimensions();
-  const isLargeScreen = width >= 768; // Tablet/desktop
+  const isLargeScreen = width >= 768;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        // â¬‡ï¸ TAB BAR APENAS NO MOBILE
-        tabBarStyle: isLargeScreen ? { display: 'none' } : {
-          backgroundColor: '#ffffff',
-          borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
-        },
+        tabBarStyle: isLargeScreen
+          ? { display: "none" }
+          : {
+              backgroundColor: "#ffffff",
+              borderTopWidth: 1,
+              borderTopColor: "#e5e7eb",
+            },
       }}
     >
-      <Tabs.Screen 
-        name="dashboard" 
+      <Tabs.Screen
+        name="dashboard"
         options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? 'ðŸ“Š' : 'ðŸ“Š'}</Text>
-          ),
+          title: "Dashboard",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📊</Text>,
         }}
       />
-      <Tabs.Screen 
-        name="transactions" 
+      <Tabs.Screen
+        name="transactions"
         options={{
-          title: 'TransaÃ§Ãµes',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? 'ðŸ’³' : 'ðŸ’³'}</Text>
-          ),
+          title: "Transações",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>💳</Text>,
         }}
       />
-      <Tabs.Screen 
-        name="reports" 
+      <Tabs.Screen
+        name="reports"
         options={{
-          title: 'RelatÃ³rios',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? 'ðŸ“ˆ' : 'ðŸ“ˆ'}</Text>
-          ),
+          title: "Relatorios",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📈</Text>,
         }}
       />
-      <Tabs.Screen 
-        name="chat" 
+      <Tabs.Screen
+        name="chat"
         options={{
-          title: 'IA',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? 'ðŸ¤–' : 'ðŸ¤–'}</Text>
-          ),
+          title: "IA",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🤖</Text>,
         }}
       />
-      <Tabs.Screen 
-        name="goal" 
+      <Tabs.Screen
+        name="goal"
         options={{
-          title: 'Metas',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? 'ðŸŽ¯' : 'ðŸŽ¯'}</Text>
-          ),
+          title: "Metas",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🎯</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="graphs"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -79,4 +75,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-

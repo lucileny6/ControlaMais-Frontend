@@ -16,6 +16,7 @@ interface TransactionFormData {
   date: string;
   notes?: string;
   recorrente: boolean;
+  recurrenceMonths?: number;
 }
 
 const normalizeDateToIso = (value: string) => {
@@ -38,6 +39,30 @@ const normalizeDateToIso = (value: string) => {
   return raw;
 };
 
+const parseIsoDateParts = (value: string) => {
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+};
+
+const addMonthsToIsoDate = (value: string, monthsToAdd: number) => {
+  const parts = parseIsoDateParts(value);
+  if (!parts) return value;
+
+  const target = new Date(parts.year, parts.month - 1 + monthsToAdd, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const safeDay = Math.min(parts.day, lastDay);
+  const month = String(target.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDay).padStart(2, "0");
+
+  return `${target.getFullYear()}-${month}-${day}`;
+};
+
 export default function NewTransactionPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -46,29 +71,39 @@ export default function NewTransactionPage() {
     try {
       setLoading(true);
 
+      const recurringOccurrencesTotal = data.recorrente
+        ? Math.max(1, Math.floor(Number(data.recurrenceMonths ?? 12)))
+        : 1;
+
+      const basePayload = {
+        descricao: data.description,
+        valor: data.amount,
+        categoria: data.category,
+        data: normalizeDateToIso(data.date),
+        observacao: data.notes,
+        recorrente: data.recorrente,
+        recurring: data.recorrente,
+      };
+
+      const payloads = data.recorrente
+        ? Array.from({ length: recurringOccurrencesTotal }, (_, index) => ({
+            ...basePayload,
+            data: addMonthsToIsoDate(basePayload.data, index),
+          }))
+        : [basePayload];
+
       if (data.type === "expense") {
-        await apiService.createDespesa({
-          descricao: data.description,
-          valor: data.amount,
-          categoria: data.category,
-          data: normalizeDateToIso(data.date),
-          observacao: data.notes,
-          recorrente: data.recorrente,
-          recurring: data.recorrente,
-        });
+        await Promise.all(payloads.map((payload) => apiService.createDespesa(payload)));
       } else {
-        await apiService.createReceita({
-          descricao: data.description,
-          valor: data.amount,
-          categoria: data.category,
-          data: normalizeDateToIso(data.date),
-          observacao: data.notes,
-          recorrente: data.recorrente,
-          recurring: data.recorrente,
-        });
+        await Promise.all(payloads.map((payload) => apiService.createReceita(payload)));
       }
 
-      Alert.alert("Sucesso", "Transação cadastrada com sucesso!");
+      Alert.alert(
+        "Sucesso",
+        data.recorrente
+          ? `Transacao recorrente cadastrada para ${recurringOccurrencesTotal} ${recurringOccurrencesTotal === 1 ? "mes" : "meses"}!`
+          : "Transacao cadastrada com sucesso!",
+      );
       router.replace("/dashboard");
     } catch (error: any) {
       const message = String(error?.message ?? "Nao foi possivel cadastrar a transacao");

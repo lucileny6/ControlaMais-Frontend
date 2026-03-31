@@ -9,7 +9,7 @@ const CHAT_WEBHOOK_URL =
   process.env.EXPO_PUBLIC_N8N_CHAT_WEBHOOK_URL ??
   process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL ??
   DEFAULT_CHAT_WEBHOOK_URL;
-const CHAT_PROVIDER = (process.env.EXPO_PUBLIC_CHAT_PROVIDER ?? "webhook").trim().toLowerCase();
+const CHAT_PROVIDER = (process.env.EXPO_PUBLIC_CHAT_PROVIDER ?? "backend").trim().toLowerCase();
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -43,7 +43,9 @@ async function sendWithFallback(message: string): Promise<AIResponse> {
 }
 
 async function sendViaBackend(message: string): Promise<AIResponse> {
-  return apiService.sendChatIA(message);
+  const response = await apiService.sendChatIA(message);
+  const normalizedResponse = normalizeAIResponse(response as JsonValue);
+  return normalizedResponse;
 }
 
 async function sendViaWebhook(message: string): Promise<AIResponse> {
@@ -186,19 +188,20 @@ function normalizeAIResponse(payload: JsonValue): AIResponse {
 
   const explicitType = pickString(record, ["tipo"]);
   const dados = extractDataRecord(record);
-  const action = dados ? normalizeAction(dados) ?? undefined : undefined;
-  const inferredType = dados ? "CONFIRMACAO" : "TEXTO";
+  const actionRecord = extractActionRecord(record, dados);
+  const action = actionRecord ? normalizeAction(actionRecord) ?? undefined : undefined;
+  const inferredType = action ? "CONFIRMACAO" : "TEXTO";
   const tipo = normalizeResponseType(explicitType, inferredType);
   const mensagem = pickString(record, ["mensagem"]) ??
     (tipo === "CONFIRMACAO"
       ? "Encontrei dados para confirmar. Deseja continuar?"
       : "Recebi sua mensagem, mas o workflow nao retornou um texto de resposta.");
 
-  return dados
+  return dados || action
     ? {
         tipo,
         mensagem,
-        dados: dados as Record<string, unknown>,
+        ...(dados ? { dados: dados as Record<string, unknown> } : {}),
         ...(action ? { acao: action } : {}),
       }
     : {
@@ -259,7 +262,50 @@ function extractDataRecord(record: Record<string, JsonValue>): Record<string, Js
     return dadosRecord;
   }
 
+  const dataRecord = asRecord(record.data);
+  if (dataRecord) {
+    return dataRecord;
+  }
+
   return undefined;
+}
+
+function extractActionRecord(
+  record: Record<string, JsonValue>,
+  dados: Record<string, JsonValue> | undefined,
+): Record<string, JsonValue> | undefined {
+  const nestedCandidates = [
+    asRecord(record.acao),
+    asRecord(record.action),
+    asRecord(record.transacao),
+    asRecord(record.transaction),
+    dados,
+  ];
+
+  for (const candidate of nestedCandidates) {
+    if (candidate && hasActionShape(candidate)) {
+      return candidate;
+    }
+  }
+
+  return hasActionShape(record) ? record : undefined;
+}
+
+function hasActionShape(record: Record<string, JsonValue>) {
+  return [
+    "valor",
+    "amount",
+    "categoria",
+    "category",
+    "descricao",
+    "description",
+    "data",
+    "date",
+    "recorrente",
+    "recurring",
+    "transactionType",
+    "natureza",
+  ].some((key) => record[key] !== undefined);
 }
 
 function normalizeAction(record: Record<string, JsonValue>): AITransactionAction | null {

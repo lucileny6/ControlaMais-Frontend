@@ -1,7 +1,7 @@
 ﻿import { DashboardHeader } from '@/components/dashboard-header';
 import { DashboardNav } from '@/components/dashboard-nav';
 import { Progress } from '@/components/ui/progress';
-import { GoalDTO, apiService } from '@/services/api';
+import { CreateDespesaDTO, GoalDTO, apiService } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -26,6 +26,16 @@ interface Goal {
 
 const DASHBOARD_GRADIENT = ['#F4F7FB', '#EAF1F8', '#E2ECF6', '#DCE7F4'] as const;
 const GOALS_CACHE_KEY = 'goalsCache';
+const GOAL_TRANSACTION_LINKS_KEY = 'goalTransactionLinks';
+
+interface GoalTransactionLink {
+  goalId: string;
+  transactionIds: string[];
+  amount: number;
+  date: string;
+  description: string;
+  notes?: string;
+}
 
 export default function GoalsPage() {
   const router = useRouter();
@@ -144,6 +154,214 @@ export default function GoalsPage() {
     }
   };
 
+  const loadGoalTransactionLinks = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(GOAL_TRANSACTION_LINKS_KEY);
+      if (!raw) return {} as Record<string, GoalTransactionLink>;
+
+      const parsed = JSON.parse(raw) as Record<string, GoalTransactionLink>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (error) {
+      console.error('Erro ao carregar vinculos de metas:', error);
+      return {} as Record<string, GoalTransactionLink>;
+    }
+  };
+
+  const persistGoalTransactionLinks = async (links: Record<string, GoalTransactionLink>) => {
+    try {
+      await AsyncStorage.setItem(GOAL_TRANSACTION_LINKS_KEY, JSON.stringify(links));
+    } catch (error) {
+      console.error('Erro ao salvar vinculos de metas:', error);
+    }
+  };
+
+  const normalizeDateToIso = (value?: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return new Date().toISOString().split('T')[0];
+
+    const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const brSlashPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+    if (isoPattern.test(raw)) return raw;
+    if (brSlashPattern.test(raw) || brDashPattern.test(raw)) {
+      const match = raw.match(brSlashPattern) ?? raw.match(brDashPattern);
+      const [, day, month, year] = match!;
+      return `${year}-${month}-${day}`;
+    }
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    return parsed.toISOString().split('T')[0];
+  };
+
+  const normalizeComparableDate = (value: string) => normalizeDateToIso(value);
+
+  const normalizeGoalTransactionText = (value: string) => String(value ?? '').trim().toLowerCase();
+
+  const resolveTransactionIds = (item: any) => {
+    const candidates: string[] = [];
+    const pushCandidate = (value: unknown) => {
+      if (value === null || value === undefined) return;
+      const normalized = String(value).trim();
+      if (!normalized || candidates.includes(normalized)) return;
+      candidates.push(normalized);
+    };
+
+    const preferredKeys = [
+      'id',
+      '_id',
+      'Id',
+      'ID',
+      'transactionId',
+      'transacaoId',
+      'idTransacao',
+      'receitaId',
+      'despesaId',
+      'id_receita',
+      'id_despesa',
+      'uuid',
+    ];
+
+    for (const key of preferredKeys) {
+      pushCandidate(item?.[key]);
+    }
+
+    for (const [key, value] of Object.entries(item ?? {})) {
+      const normalizedKey = key.toLowerCase();
+      const isLikelyId = normalizedKey.includes('id');
+      const isForeignId = normalizedKey.includes('user') || normalizedKey.includes('usuario');
+      if (!isLikelyId || isForeignId) continue;
+      pushCandidate(value);
+    }
+
+    pushCandidate(item?.despesa?.id);
+    pushCandidate(item?.transacao?.id);
+    return candidates;
+  };
+
+  const buildGoalTransactionPayload = (
+    nome: string,
+    descricao: string,
+    valorMeta: number,
+    prazo?: string,
+  ): CreateDespesaDTO => ({
+    descricao: nome || 'Meta de investimento',
+    valor: valorMeta,
+    categoria: 'Investimento',
+    data: normalizeDateToIso(prazo),
+    observacao: descricao || undefined,
+    recorrente: false,
+    recurring: false,
+  });
+
+  const findGoalTransactionIdsByPayload = async (payload: CreateDespesaDTO) => {
+    const transactions = await apiService.getTransactions().catch(() => []);
+    const matched = (transactions ?? []).find((transaction: any) => {
+      const type = String(transaction?.type ?? transaction?.tipo ?? '').toLowerCase().trim();
+      const normalizedType = type === 'income' || type === 'receita' || type === 'entrada' ? 'income' : 'expense';
+
+      return (
+        normalizedType === 'expense' &&
+        Math.abs(Number(transaction?.amount ?? transaction?.valor ?? 0) - payload.valor) < 0.001 &&
+        normalizeGoalTransactionText(String(transaction?.description ?? transaction?.descricao ?? '')) ===
+          normalizeGoalTransactionText(payload.descricao) &&
+        normalizeGoalTransactionText(String(transaction?.category ?? transaction?.categoria ?? '')) ===
+          normalizeGoalTransactionText(payload.categoria) &&
+        normalizeComparableDate(String(transaction?.date ?? transaction?.data ?? '')) ===
+          normalizeComparableDate(payload.data)
+      );
+    });
+
+    return resolveTransactionIds(matched);
+  };
+
+  const syncGoalTransaction = async (
+    goalId: string,
+    payload: CreateDespesaDTO,
+    existingLink?: GoalTransactionLink,
+  ): Promise<GoalTransactionLink> => {
+    const transactionIds = [...new Set(existingLink?.transactionIds ?? [])].filter(Boolean);
+
+    if (transactionIds.length > 0) {
+      let lastError: unknown = null;
+
+      for (const transactionId of transactionIds) {
+        try {
+          await apiService.updateTransaction(
+            transactionId,
+            {
+              ...payload,
+              type: 'expense',
+              tipo: 'expense',
+            },
+            'expense',
+          );
+
+          return {
+            goalId,
+            transactionIds,
+            amount: payload.valor,
+            date: payload.data,
+            description: payload.descricao,
+            notes: payload.observacao,
+          };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (lastError) {
+        console.error('Erro ao atualizar transacao vinculada a meta:', lastError);
+      }
+    }
+
+    const response = await apiService.createDespesa(payload);
+    const createdIds = resolveTransactionIds(response);
+    const fallbackIds = createdIds.length > 0 ? createdIds : await findGoalTransactionIdsByPayload(payload);
+
+    if (fallbackIds.length === 0) {
+      throw new Error('Meta salva, mas nao foi possivel localizar a transacao de investimento vinculada.');
+    }
+
+    return {
+      goalId,
+      transactionIds: fallbackIds,
+      amount: payload.valor,
+      date: payload.data,
+      description: payload.descricao,
+      notes: payload.observacao,
+    };
+  };
+
+  const deleteGoalTransaction = async (link?: GoalTransactionLink) => {
+    if (!link) return;
+
+    let deleted = false;
+    let lastError: unknown = null;
+    for (const transactionId of link.transactionIds) {
+      try {
+        await apiService.deleteTransaction(transactionId, 'expense');
+        deleted = true;
+        break;
+      } catch (error) {
+        const message = String((error as any)?.message ?? '');
+        if (message.includes('404')) {
+          deleted = true;
+          break;
+        }
+        lastError = error;
+      }
+    }
+
+    if (!deleted && link.transactionIds.length > 0) {
+      throw lastError ?? new Error('Nao foi possivel excluir a transacao vinculada a meta.');
+    }
+  };
+
   const loadCachedGoals = async () => {
     try {
       const cached = await AsyncStorage.getItem(GOALS_CACHE_KEY);
@@ -160,12 +378,28 @@ export default function GoalsPage() {
   const loadGoals = async () => {
     try {
       const cachedGoals = await loadCachedGoals();
+      const goalLinks = await loadGoalTransactionLinks();
       if (cachedGoals.length > 0) {
-        setGoals(cachedGoals);
+        setGoals(
+          cachedGoals.map((goal) => ({
+            ...goal,
+            category: 'Investimento',
+            currentAmount: goalLinks[goal.id]?.amount ?? goal.currentAmount,
+          })),
+        );
       }
 
       const rawGoals = await apiService.getMetas();
-      const normalizedGoals = (rawGoals ?? []).map(normalizeGoal);
+      const normalizedGoals = (rawGoals ?? []).map((goal, index) => {
+        const normalizedGoal = normalizeGoal(goal, index);
+        const link = goalLinks[normalizedGoal.id];
+
+        return {
+          ...normalizedGoal,
+          category: 'Investimento',
+          currentAmount: link?.amount ?? normalizedGoal.currentAmount,
+        };
+      });
       const mergedGoals = mergeGoals(cachedGoals, normalizedGoals);
       setGoals(mergedGoals);
       await persistGoals(mergedGoals);
@@ -269,6 +503,9 @@ export default function GoalsPage() {
     try {
       setIsCreatingGoal(true);
       let savedGoal: Goal | null = null;
+      const goalTransactionPayload = buildGoalTransactionPayload(nome, descricao, valorMeta, prazo || undefined);
+      const goalLinks = await loadGoalTransactionLinks();
+      let savedLink: GoalTransactionLink | null = null;
 
       if (editingGoalId) {
         const response = await apiService.updateMeta(editingGoalId, {
@@ -277,7 +514,11 @@ export default function GoalsPage() {
           descricao: descricao || undefined,
           prazo: prazo || undefined,
         });
-        savedGoal = normalizeGoal(response, 0);
+        savedGoal = {
+          ...normalizeGoal(response, 0),
+          category: 'Investimento',
+        };
+        savedLink = await syncGoalTransaction(savedGoal.id || editingGoalId, goalTransactionPayload, goalLinks[editingGoalId]);
       } else {
         const response = await apiService.createMeta({
           nome,
@@ -285,7 +526,32 @@ export default function GoalsPage() {
           descricao: descricao || undefined,
           prazo: prazo || undefined,
         });
-        savedGoal = normalizeGoal(response, 0);
+        savedGoal = {
+          ...normalizeGoal(response, 0),
+          category: 'Investimento',
+        };
+
+        try {
+          savedLink = await syncGoalTransaction(savedGoal.id, goalTransactionPayload);
+        } catch (transactionError) {
+          await apiService.deleteMeta(savedGoal.id).catch(() => null);
+          throw transactionError;
+        }
+      }
+
+      if (savedGoal && savedLink) {
+        const nextLinks = {
+          ...goalLinks,
+          [savedGoal.id]: savedLink,
+        };
+        if (editingGoalId && editingGoalId !== savedGoal.id) {
+          delete nextLinks[editingGoalId];
+        }
+        await persistGoalTransactionLinks(nextLinks);
+        savedGoal = {
+          ...savedGoal,
+          currentAmount: savedLink.amount,
+        };
       }
 
       if (savedGoal) {
@@ -333,10 +599,16 @@ export default function GoalsPage() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const goalLinks = await loadGoalTransactionLinks();
+              await deleteGoalTransaction(goalLinks[goal.id]);
+
               setGoals((previous) => previous.filter((item) => item.id !== goal.id));
               const cachedGoals = await loadCachedGoals();
               await persistGoals(cachedGoals.filter((item) => item.id !== goal.id));
               await apiService.deleteMeta(goal.id);
+              const nextLinks = { ...goalLinks };
+              delete nextLinks[goal.id];
+              await persistGoalTransactionLinks(nextLinks);
               const reloaded = await loadGoals();
               Alert.alert(
                 reloaded ? 'Sucesso' : 'Sucesso parcial',

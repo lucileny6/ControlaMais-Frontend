@@ -40,8 +40,19 @@ type LoginUser = {
   user_name?: string;
 };
 
+const formatNameFromEmail = (email: string) => {
+  const localPart = String(email ?? "").trim().split("@")[0] ?? "";
+  if (!localPart) return "";
+
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 const resolveDisplayNameFromLogin = (user: unknown, email: string) => {
-  if (!user || typeof user !== "object") return "";
+  if (!user || typeof user !== "object") return formatNameFromEmail(email);
   const u = user as LoginUser;
 
   const preferredName = [
@@ -64,7 +75,7 @@ const resolveDisplayNameFromLogin = (user: unknown, email: string) => {
     return usernameCandidate;
   }
 
-  return "";
+  return formatNameFromEmail(email);
 };
 
 export default function Login() {
@@ -100,10 +111,23 @@ export default function Login() {
       }
 
       const resolvedName = resolveDisplayNameFromLogin(responseData.user, email);
+      const userToPersist =
+        responseData.user && typeof responseData.user === "object"
+          ? {
+              ...(responseData.user as Record<string, unknown>),
+              ...(resolvedName ? { displayName: resolvedName } : {}),
+              email,
+            }
+          : {
+              email,
+              ...(resolvedName ? { displayName: resolvedName } : {}),
+            };
 
       await AsyncStorage.multiSet([
         ["authToken", token],
         ["@authToken", token],
+        ["user", JSON.stringify(userToPersist)],
+        ["@user", JSON.stringify(userToPersist)],
       ]);
       if (resolvedName) {
         await AsyncStorage.multiSet([

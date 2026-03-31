@@ -14,18 +14,23 @@ export function DashboardNav() {
       icon: LayoutDashboard,
     },
     {
-      title: "Transacoes",
+      title: "Transações",
       href: "/(tabs)/transactions",
       icon: Wallet,
     },
     {
-      title: "Relatorios",
+      title: "Relatórios",
       href: "/(tabs)/reports",
       icon: BarChart3,
     },
     {
+      title: "Graficos",
+      href: "/(tabs)/graphs",
+      icon: BarChart3,
+    },
+    {
       title: "Metas",
-      href: "/(tabs)/goal",
+      href: "/(tabs)/transactions?new=1&type=expense&source=goal&category=Investimento&description=Meta%20de%20investimento",
       icon: Goal,
     },
     {

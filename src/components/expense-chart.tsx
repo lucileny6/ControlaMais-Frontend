@@ -95,39 +95,6 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
               })}
             </View>
 
-            <View style={styles.tableSection}>
-              <Text style={styles.tableTitle}>Resumo por categoria</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.table}>
-                  <View style={[styles.tableRow, styles.tableHeaderRow]}>
-                    <Text style={[styles.tableCell, styles.headerCell, styles.categoryColumn]}>Categoria</Text>
-                    <Text style={[styles.tableCell, styles.headerCell, styles.valueColumn]}>Orcamento</Text>
-                    <Text style={[styles.tableCell, styles.headerCell, styles.valueColumn]}>Despesa</Text>
-                  </View>
-                  {expenseData.map((item, index) => (
-                    <View key={`table-${item.category}-${index}`} style={styles.tableRow}>
-                      <Text style={[styles.tableCell, styles.categoryColumn]}>{item.category}</Text>
-                      <Text style={[styles.tableCell, styles.valueColumn]}>
-                        {item.budget > 0 ? `R$ ${formatCurrency(item.budget)}` : '-'}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.tableCell,
-                          styles.valueColumn,
-                          item.budget > 0
-                            ? item.amount > item.budget
-                              ? styles.expenseOverBudget
-                              : styles.expenseWithinBudget
-                            : undefined,
-                        ]}
-                      >
-                        R$ {formatCurrency(item.amount)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
           </ScrollView>
         ) : (
           <View style={styles.emptyState}>
@@ -225,57 +192,6 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 14,
     color: '#64748b',
-  },
-  tableSection: {
-    marginTop: 12,
-    gap: 8,
-  },
-  tableTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  table: {
-    minWidth: 420,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  tableHeaderRow: {
-    backgroundColor: '#f8fafc',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  tableCell: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 12,
-    color: '#111827',
-  },
-  headerCell: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  categoryColumn: {
-    minWidth: 150,
-    flex: 2,
-  },
-  valueColumn: {
-    minWidth: 130,
-    flex: 1.5,
-  },
-  expenseOverBudget: {
-    color: '#dc2626',
-    fontWeight: '700',
-  },
-  expenseWithinBudget: {
-    color: '#16a34a',
-    fontWeight: '700',
   },
 });
 

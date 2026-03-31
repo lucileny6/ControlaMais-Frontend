@@ -8,7 +8,6 @@ import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BrandColors } from "../constants/theme";
 
 type RegisterResponse = {
   token?: string;
@@ -72,8 +71,8 @@ export default function RegisterPage() {
 
   return (
     <LinearGradient
-      colors={["#020305", "#03100E", "#052A24", "#11B99C", "#29E9CF"]}
-      locations={[0, 0.3, 0.57, 0.82, 1]}
+      colors={["#0B1624", "#12354A", "#178A86", "#7FE7D0"]}
+      locations={[0, 0.3, 0.57, 0.82]}
       style={styles.gradient}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -176,46 +175,53 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   content: {
-    maxWidth: 400,
+    padding: 24,
+    maxWidth: 420,
     width: "100%",
     alignSelf: "center",
   },
   card: {
     width: 400,
     maxWidth: "100%",
-    backgroundColor: "#FFFFFF",
-    borderColor: "rgba(56, 255, 226, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: "rgba(214, 252, 244, 0.4)",
     borderWidth: 1,
+    borderRadius: 24,
+    shadowColor: "#0B1624",
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
   },
   cardTitle: {
     fontSize: 32,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 8,
-    color: "#000000",
+    color: "#10233F",
   },
   cardSubtitle: {
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 12,
-    color: "#021416",
+    marginBottom: 32,
+    color: "#4D6176",
   },
   inputContainer: {
     marginBottom: 16,
   },
   input: {
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    backgroundColor: "rgba(244, 249, 251, 0.98)",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(56, 255, 226, 0.3)",
-    color: "#F8FAFC",
+    borderColor: "rgba(154, 176, 194, 0.42)",
+    color: "#10233F",
     fontSize: 16,
   },
   errorContainer: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: "rgba(254, 242, 242, 0.95)",
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FECACA",
     marginBottom: 16,
@@ -226,17 +232,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    backgroundColor: BrandColors.primaryButton,
+    backgroundColor: "#10233F",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: {
-    opacity: 0.65,
+    backgroundColor: "#5C6B7D",
   },
   buttonText: {
-    color: "#ECFEFF",
+    color: "#F4FFFC",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -247,16 +253,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   loginText: {
-    color: "#111827",
+    color: "#4D6176",
     fontSize: 14,
   },
   loginLink: {
-    color: "#000506",
+    color: "#10233F",
     fontSize: 14,
     fontWeight: "600",
   },
   linkDisabled: {
-    color: "#9CA3AF",
+    color: "#43556A",
     opacity: 0.6,
   },
 });

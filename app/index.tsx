@@ -35,8 +35,8 @@ export default function HomeScreen() {
 
   return (
     <LinearGradient
-      colors={["#0B1624", "#12354A", "#178A86", "#7FE7D0"]}
-      locations={[0, 0.3, 0.57, 0.82, 1]}
+      colors={["#071126", "#0F2550", "#2F6CC1", "#A9CCFF"]}
+      locations={[0, 0.34, 0.72, 0.98]}
       style={styles.page}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -154,10 +154,10 @@ const styles = StyleSheet.create({
   enterButton: {
     borderRadius: 999,
     borderWidth: 1.3,
-    borderColor: "rgba(223, 247, 242, 0.3)",
+    borderColor: "rgba(214, 232, 255, 0.34)",
     paddingVertical: 12,
     paddingHorizontal: 26,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
 
   enterButtonText: {
@@ -170,10 +170,10 @@ const styles = StyleSheet.create({
   downloadButton: {
     borderRadius: 999,
     borderWidth: 1.3,
-    borderColor: "#7FF4D2",
+    borderColor: "#9CC2FF",
     paddingVertical: 12,
     paddingHorizontal: 26,
-    backgroundColor: "#10233F",
+    backgroundColor: "#0F2550",
   },
 
   downloadButtonText: {
@@ -202,12 +202,12 @@ const styles = StyleSheet.create({
   imageEnterButton: {
     position: "absolute",
     bottom: 28,
-    backgroundColor: "#10233F",
+    backgroundColor: "#0F2550",
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: 999,
     borderWidth: 1.2,
-    borderColor: "#63E7CB",
+    borderColor: "#8EB8FF",
   },
 
   imageEnterButtonText: {

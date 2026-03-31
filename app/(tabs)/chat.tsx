@@ -2,7 +2,18 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
+import {
+  buildMonthlyFinanceSnapshot,
+  normalizeDashboardTransaction,
+  parseTransactionDate,
+} from "@/lib/monthly-finance";
+import {
+  interpretUserMessage,
+  type InterpretedMessage,
+} from "@/lib/interpretador";
 import { AIResponse, AITransactionAction } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiService } from "@/services/api";
 import { chatIAService } from "@/services/chatIA";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,7 +38,127 @@ interface Message {
   timestamp: Date;
 }
 
+interface PendingRegistrationDraft {
+  tipo: "income" | "expense";
+  subject: string;
+}
+
+interface User {
+  name?: string;
+  nome?: string;
+  nomeCompleto?: string;
+  displayName?: string;
+  userName?: string;
+  user_name?: string;
+  username?: string;
+  fullName?: string;
+  firstName?: string;
+  given_name?: string;
+  email?: string;
+}
+
 const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
+const getWelcomeMessage = (name?: string) =>
+  name
+    ? `Olá, ${name}! 👋 Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?`
+    : "Olá! 👋 Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?";
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+    const decodeBase64 = (globalThis as any)?.atob;
+    if (typeof decodeBase64 !== "function") return null;
+
+    return JSON.parse(decodeBase64(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function getStringClaim(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function formatNameFromEmail(email?: string) {
+  const localPart = String(email ?? "").trim().split("@")[0] ?? "";
+  if (!localPart) return "";
+
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function resolveUserName(user: User | null) {
+  if (!user) return "";
+
+  const emailPrefix = user.email?.includes("@") ? user.email.split("@")[0].trim().toLowerCase() : "";
+  const candidates = [
+    user.displayName,
+    user.nomeCompleto,
+    user.nome,
+    user.fullName,
+    user.firstName,
+    user.given_name,
+    user.name,
+    user.userName,
+    user.user_name,
+    user.username,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate ?? "").trim();
+    if (!value) continue;
+    if (emailPrefix && value.toLowerCase() === emailPrefix) continue;
+    if (/\d/.test(value)) continue;
+    return value;
+  }
+
+  return formatNameFromEmail(user.email);
+}
+
+function getUserFromToken(token: string): User | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+
+  const email = getStringClaim(payload, ["email", "upn"]);
+  const sub = getStringClaim(payload, ["sub"]);
+  const name = getStringClaim(payload, [
+    "name",
+    "nome",
+    "nomeCompleto",
+    "displayName",
+    "fullName",
+    "firstName",
+    "given_name",
+    "preferred_username",
+    "user_name",
+    "username",
+  ]);
+
+  const resolvedEmail = email || (sub.includes("@") ? sub : "");
+  if (!name && !resolvedEmail) return null;
+
+  return { name: name || undefined, email: resolvedEmail || undefined };
+}
+
+// Legacy helper kept temporarily while the chat flow is being migrated.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function isCancelMessage(normalized: string) {
+  return ["cancelar", "cancela", "nao", "não", "parar", "deixa"].includes(normalized);
+}
 
 export default function ChatPage() {
   const insets = useSafeAreaInsets();
@@ -48,8 +179,12 @@ export default function ChatPage() {
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
   const [pendingAction, setPendingAction] = useState<AITransactionAction | null>(null);
   const [pendingConfirmationData, setPendingConfirmationData] = useState<Record<string, unknown> | null>(null);
+  const [pendingConfirmationMessage, setPendingConfirmationMessage] = useState<string | null>(null);
+  const [pendingRegistrationDraft, setPendingRegistrationDraft] = useState<PendingRegistrationDraft | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const scrollViewRef = useRef<ScrollView>(null);
   const hasPendingConfirmationData = pendingConfirmationData !== null;
+  const hasStructuredConfirmation = pendingAction !== null || hasPendingConfirmationData;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -58,6 +193,424 @@ export default function ChatPage() {
 
     return () => clearTimeout(timeout);
   }, [messages, isLoading, aguardandoConfirmacao]);
+
+  useEffect(() => {
+    const loadDisplayName = async () => {
+      const [storedUser, legacyStoredUser, storedDisplayName, legacyDisplayName, authToken, legacyAuthToken] = await Promise.all([
+        AsyncStorage.getItem("user"),
+        AsyncStorage.getItem("@user"),
+        AsyncStorage.getItem("displayName"),
+        AsyncStorage.getItem("@displayName"),
+        AsyncStorage.getItem("authToken"),
+        AsyncStorage.getItem("@authToken"),
+      ]);
+
+      const persistedDisplayName = String(storedDisplayName || legacyDisplayName || "").trim();
+      const token = String(authToken || legacyAuthToken || "");
+      const serializedUser = storedUser || legacyStoredUser;
+
+      let parsedUser: User | null = null;
+      if (serializedUser) {
+        try {
+          parsedUser = JSON.parse(serializedUser) as User;
+        } catch {
+          parsedUser = null;
+        }
+      }
+
+      if (persistedDisplayName) {
+        parsedUser = {
+          ...(parsedUser ?? {}),
+          displayName: persistedDisplayName,
+        };
+      }
+
+      const resolvedDisplayName =
+        resolveUserName(parsedUser) ||
+        resolveUserName(getUserFromToken(token)) ||
+        persistedDisplayName;
+
+      setDisplayName(resolvedDisplayName);
+
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        if (prev[0]?.id !== "1" || prev[0]?.isUser) return prev;
+
+        const next = [...prev];
+        next[0] = {
+          ...next[0],
+          content: getWelcomeMessage(resolvedDisplayName),
+        };
+        return next;
+      });
+    };
+
+    void loadDisplayName();
+  }, []);
+
+  const addNamePrefix = (message: string) =>
+    displayName ? `${displayName}, ${message.charAt(0).toLowerCase()}${message.slice(1)}` : message;
+
+  const resolveTransactionCategory = (
+    rawCategory: string,
+    transactionType: PendingRegistrationDraft["tipo"] | "income" | "expense",
+  ) => {
+    const normalized = rawCategory
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+    if (transactionType === "income") {
+      if (["salario", "pagamento", "holerite"].some((keyword) => normalized.includes(keyword))) {
+        return "Salário";
+      }
+
+      if (["comissao", "bonus", "bonificacao"].some((keyword) => normalized.includes(keyword))) {
+        return "Comissão";
+      }
+
+      return "Renda extra";
+    }
+
+    if (
+      [
+        "investimento",
+        "investi",
+        "investir",
+        "aporte",
+        "apliquei",
+        "aplicacao",
+        "acoes",
+        "acao",
+        "tesouro",
+        "cdb",
+        "fii",
+        "cripto",
+        "bitcoin",
+      ].some((keyword) => normalized.includes(keyword))
+    ) {
+      return "Investimento";
+    }
+
+    if (
+      [
+        "mercado",
+        "supermercado",
+        "feira",
+        "padaria",
+        "acougue",
+        "açougue",
+        "sacolao",
+        "hortifruti",
+      ].some((keyword) => normalized.includes(keyword))
+    ) {
+      return "Alimentacao";
+    }
+
+    if (["lanche", "restaurante", "ifood", "delivery", "pizza", "hamburguer"].some((keyword) => normalized.includes(keyword))) {
+      return "Restaurante";
+    }
+
+    if (["uber", "99", "onibus", "ônibus", "metro", "metrô", "gasolina", "combustivel", "combustível"].some((keyword) => normalized.includes(keyword))) {
+      return "Transporte";
+    }
+
+    if (["aluguel", "condominio", "condomínio", "agua", "água", "luz", "energia", "internet"].some((keyword) => normalized.includes(keyword))) {
+      return "Moradia";
+    }
+
+    if (["farmacia", "farmácia", "remedio", "remédio", "consulta", "medico", "médico", "plano de saude", "plano de saúde"].some((keyword) => normalized.includes(keyword))) {
+      return "Saude";
+    }
+
+    if (["cinema", "viagem", "show", "bar", "festa", "lazer", "streaming"].some((keyword) => normalized.includes(keyword))) {
+      return "Lazer";
+    }
+
+    return "Outros";
+  };
+
+  const buildActionFromInterpretation = (
+    interpretation: InterpretedMessage,
+    fallbackType?: PendingRegistrationDraft["tipo"],
+    fallbackCategory?: string,
+  ): AITransactionAction | null => {
+    const inferredType =
+      interpretation.intent === "create_income"
+        ? "income"
+        : interpretation.intent === "create_expense"
+        ? "expense"
+        : fallbackType;
+
+    const amount = interpretation.entities.amount;
+    if (!inferredType || amount === undefined || amount <= 0) {
+      return null;
+    }
+
+    const description = String(interpretation.entities.category ?? fallbackCategory ?? "").trim();
+    const category = resolveTransactionCategory(description, inferredType);
+    const label = inferredType === "expense" ? "despesa" : "receita";
+
+    return {
+      tipo: inferredType,
+      valor: amount,
+      categoria: category,
+      descricao: description || `Lancamento de ${label} via chat`,
+      data: normalizeDateValue(interpretation.entities.date),
+    };
+  };
+
+  const buildRegistrationDecision = (interpretation: InterpretedMessage): AIResponse | null => {
+    if (interpretation.intent === "create_transaction") {
+      setPendingRegistrationDraft(null);
+      return {
+        tipo: "TEXTO",
+        mensagem: addNamePrefix(
+          "Claro. Me diga se voce quer registrar uma receita ou uma despesa e informe valor e descricao.",
+        ),
+      };
+    }
+
+    if (interpretation.intent !== "create_expense" && interpretation.intent !== "create_income") {
+      return null;
+    }
+
+    const transactionType = interpretation.intent === "create_income" ? "income" : "expense";
+    const amount = interpretation.entities.amount;
+    const category = String(interpretation.entities.category ?? "").trim();
+    const label = transactionType === "expense" ? "despesa" : "receita";
+    const connector = transactionType === "expense" ? "com" : "de";
+
+    if (amount !== undefined && amount > 0) {
+      const action = buildActionFromInterpretation(interpretation, transactionType, category);
+      if (!action) {
+        return null;
+      }
+
+      const subjectText = category || label;
+      setPendingRegistrationDraft(null);
+      return {
+        tipo: "CONFIRMACAO",
+        mensagem: addNamePrefix(`Confirma ${formatCurrency(amount)} ${connector} ${subjectText}?`),
+        acao: action,
+      };
+    }
+
+    if (category) {
+      setPendingRegistrationDraft({
+        tipo: transactionType,
+        subject: category,
+      });
+      return {
+        tipo: "TEXTO",
+        mensagem: addNamePrefix(`Claro. Qual o valor da ${label} ${connector} ${category}?`),
+      };
+    }
+
+    setPendingRegistrationDraft(null);
+    return {
+      tipo: "TEXTO",
+      mensagem: addNamePrefix(
+        transactionType === "expense"
+          ? 'Claro. Me diga o gasto com valor e descricao, por exemplo: "gastei 15 reais com lanche".'
+          : 'Claro. Me diga a receita com valor e descricao, por exemplo: "recebi 1200 de salario".',
+      ),
+    };
+  };
+
+  const buildPendingDraftDecision = (interpretation: InterpretedMessage): AIResponse | null => {
+    if (!pendingRegistrationDraft) {
+      return null;
+    }
+
+    if (interpretation.intent === "cancel") {
+      setPendingRegistrationDraft(null);
+      return {
+        tipo: "TEXTO",
+        mensagem: addNamePrefix("Tudo bem. Cancelei esse cadastro pelo chat."),
+      };
+    }
+
+    const amount = interpretation.entities.amount;
+    const operationLabel = pendingRegistrationDraft.tipo === "expense" ? "despesa" : "receita";
+    const connector = pendingRegistrationDraft.tipo === "expense" ? "com" : "de";
+
+    if (amount === undefined || amount <= 0) {
+      return {
+        tipo: "TEXTO",
+        mensagem: addNamePrefix(
+          `Ainda preciso do valor da ${operationLabel} ${connector} ${pendingRegistrationDraft.subject}.`,
+        ),
+      };
+    }
+
+    const action = buildActionFromInterpretation(
+      interpretation,
+      pendingRegistrationDraft.tipo,
+      pendingRegistrationDraft.subject,
+    );
+    if (!action) {
+      return null;
+    }
+
+    setPendingRegistrationDraft(null);
+    return {
+      tipo: "CONFIRMACAO",
+      mensagem: addNamePrefix(
+        `Confirma ${formatCurrency(amount)} ${connector} ${pendingRegistrationDraft.subject}?`,
+      ),
+      acao: action,
+    };
+  };
+
+  const buildLocalFinanceReply = async (interpretation: InterpretedMessage): Promise<string | null> => {
+    const intent = interpretation.intent;
+    const isFinanceIntent = [
+      "get_balance",
+      "get_expenses",
+      "get_income",
+      "get_summary",
+      "get_top_expense",
+    ].includes(intent);
+
+    if (!isFinanceIntent) {
+      return null;
+    }
+
+    try {
+      const transactions = await apiService.getTransactions();
+      const normalizedTransactions = (transactions ?? []).map((transaction: any, index: number) =>
+        normalizeDashboardTransaction(transaction, index),
+      );
+      const snapshot = buildMonthlyFinanceSnapshot(normalizedTransactions);
+      const requestedDate = interpretation.entities.date;
+      const currentDate = new Date();
+      const currentDateKey = [
+        currentDate.getFullYear(),
+        String(currentDate.getMonth() + 1).padStart(2, "0"),
+        String(currentDate.getDate()).padStart(2, "0"),
+      ].join("-");
+
+      const filteredTransactions = requestedDate
+        ? normalizedTransactions.filter((transaction) => {
+            const parsedDate = parseTransactionDate(transaction.date);
+            if (!parsedDate) return false;
+            const transactionDate = [
+              parsedDate.getFullYear(),
+              String(parsedDate.getMonth() + 1).padStart(2, "0"),
+              String(parsedDate.getDate()).padStart(2, "0"),
+            ].join("-");
+            return transactionDate === requestedDate;
+          })
+        : snapshot.transactions;
+
+      const filteredIncome = filteredTransactions
+        .filter((transaction) => transaction.type === "income")
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      const filteredExpenses = filteredTransactions
+        .filter((transaction) => transaction.type === "expense")
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      const filteredBalance = filteredIncome - filteredExpenses;
+      const filteredExpenseTotals = filteredTransactions
+        .filter((transaction) => transaction.type === "expense")
+        .reduce((acc, transaction) => {
+          const category = transaction.category || "Sem categoria";
+          acc.set(category, (acc.get(category) ?? 0) + transaction.amount);
+          return acc;
+        }, new Map<string, number>());
+      const topExpenseCategory = [...filteredExpenseTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+
+      const monthLabel = snapshot.monthDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      });
+      const specificDateLabel =
+        requestedDate && parseTransactionDate(requestedDate)
+          ? parseTransactionDate(requestedDate)!.toLocaleDateString("pt-BR")
+          : null;
+      const isToday = requestedDate === currentDateKey;
+      const periodReference = isToday
+        ? "hoje"
+        : specificDateLabel
+        ? `em ${specificDateLabel}`
+        : `em ${monthLabel}`;
+
+      if (filteredTransactions.length === 0) {
+        if (intent === "get_income") {
+          return addNamePrefix(`Ainda nao encontrei receitas registradas ${periodReference}.`);
+        }
+
+        if (intent === "get_expenses" || intent === "get_top_expense") {
+          return addNamePrefix(`Ainda nao encontrei despesas registradas ${periodReference}.`);
+        }
+
+        return addNamePrefix(`Ainda nao encontrei lancamentos ${periodReference}.`);
+      }
+
+      if (intent === "get_balance") {
+        return addNamePrefix(`Seu saldo ${periodReference} esta em ${formatCurrency(filteredBalance)}.`);
+      }
+
+      if (intent === "get_income") {
+        return addNamePrefix(`Voce recebeu ${formatCurrency(filteredIncome)} ${periodReference}.`);
+      }
+
+      if (intent === "get_expenses") {
+        return addNamePrefix(`Voce gastou ${formatCurrency(filteredExpenses)} ${periodReference}.`);
+      }
+
+      if (intent === "get_top_expense") {
+        if (!topExpenseCategory) {
+          return addNamePrefix(`Nao encontrei uma categoria de despesa dominante ${periodReference}.`);
+        }
+
+        return addNamePrefix(
+          `A categoria que mais pesou ${periodReference} foi ${topExpenseCategory[0]}, com ${formatCurrency(topExpenseCategory[1])}.`,
+        );
+      }
+
+      const categoryHighlight = topExpenseCategory
+        ? ` A categoria que mais pesou foi ${topExpenseCategory[0]} com ${formatCurrency(topExpenseCategory[1])}.`
+        : "";
+
+      return addNamePrefix(
+        `No periodo consultado, suas receitas somam ${formatCurrency(filteredIncome)}, as despesas ${formatCurrency(filteredExpenses)} e o saldo esta em ${formatCurrency(filteredBalance)}.${categoryHighlight}`,
+      );
+    } catch (error) {
+      console.warn("[Chat] Nao foi possivel montar o resumo financeiro local:", error);
+      return null;
+    }
+  };
+
+  const buildLocalResponse = async (interpretation: InterpretedMessage): Promise<AIResponse | null> => {
+    const draftResponse = buildPendingDraftDecision(interpretation);
+    if (draftResponse) {
+      return draftResponse;
+    }
+
+    const registrationResponse = buildRegistrationDecision(interpretation);
+    if (registrationResponse) {
+      return registrationResponse;
+    }
+
+    const financeReply = await buildLocalFinanceReply(interpretation);
+    if (financeReply) {
+      return {
+        tipo: "TEXTO",
+        mensagem: financeReply,
+      };
+    }
+
+    if (interpretation.intent === "cancel") {
+      return {
+        tipo: "TEXTO",
+        mensagem: addNamePrefix("Tudo bem. Se quiser, podemos tentar novamente."),
+      };
+    }
+
+    return null;
+  };
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
@@ -73,7 +626,9 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      const response: AIResponse = await chatIAService.sendMessage(content);
+      const interpretation = interpretUserMessage(content);
+      const localResponse = await buildLocalResponse(interpretation);
+      const response: AIResponse = localResponse ?? (await chatIAService.sendMessage(content));
 
       const iaMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -86,14 +641,13 @@ export default function ChatPage() {
       setAguardandoConfirmacao(response.tipo === "CONFIRMACAO");
       setPendingConfirmationData(response.dados ?? null);
       setPendingAction(response.acao ?? response.action ?? null);
+      setPendingConfirmationMessage(response.tipo === "CONFIRMACAO" ? response.mensagem : null);
     } catch (error: any) {
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
-          content: String(
-            error?.message ?? "Erro ao comunicar com o workflow do chat.",
-          ),
+          content: String(error?.message ?? "Erro ao comunicar com o workflow do chat."),
           isUser: false,
           timestamp: new Date(),
         },
@@ -110,6 +664,7 @@ export default function ChatPage() {
       valor: parseCurrencyValue(action.valor ?? action.amount),
       categoria: String(action.categoria ?? action.category ?? "Sem categoria").trim(),
       data: normalizeDateValue(action.data ?? action.date),
+      observacao: "[CHAT] Criado via chat",
       recorrente: parseBooleanValue(action.recorrente ?? action.recurring),
       recurring: parseBooleanValue(action.recorrente ?? action.recurring),
     };
@@ -138,17 +693,20 @@ export default function ChatPage() {
 
     setIsLoading(true);
     void createTransactionFromAction(pendingAction)
-      .then((message) => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: message,
-            isUser: false,
-            timestamp: new Date(),
-          },
-        ]);
-      })
+     .then((message) => {
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: Date.now().toString(),
+      content: message,
+      isUser: false,
+      timestamp: new Date(),
+    },
+  ]);
+
+  //  solução simples
+  window.location.reload();
+})
       .catch((error: any) => {
         setMessages((prev) => [
           ...prev,
@@ -163,6 +721,7 @@ export default function ChatPage() {
       .finally(() => {
         setPendingAction(null);
         setPendingConfirmationData(null);
+        setPendingConfirmationMessage(null);
         setIsLoading(false);
       });
   };
@@ -171,6 +730,7 @@ export default function ChatPage() {
     setAguardandoConfirmacao(false);
     setPendingAction(null);
     setPendingConfirmationData(null);
+    setPendingConfirmationMessage(null);
     handleSendMessage("cancelar");
   };
 
@@ -230,18 +790,25 @@ export default function ChatPage() {
                 {aguardandoConfirmacao && (
                   <View style={styles.confirmBox}>
                     <Text style={styles.confirmText}>
-                      {hasPendingConfirmationData
-                        ? "Deseja confirmar os dados retornados pelo chat?"
-                        : "Deseja confirmar a acao sugerida pelo chat?"}
+                      {pendingConfirmationMessage ??
+                        (hasStructuredConfirmation
+                          ? "Se estiver tudo certo, confirme para registrar este lancamento."
+                          : "Se a interpretacao estiver correta, confirme para continuar.")}
+                    </Text>
+
+                    <Text style={styles.confirmHint}>
+                      {hasStructuredConfirmation
+                        ? "Ao confirmar, o lancamento sera salvo no seu historico."
+                        : "Ao confirmar, vamos responder 'sim' para a IA continuar o fluxo."}
                     </Text>
 
                     <View style={styles.confirmButtons}>
                       <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
-                        <Text style={styles.confirmBtnText}>Confirmar</Text>
+                        <Text style={styles.confirmBtnText}>Sim, confirmar</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity style={styles.cancelBtn} onPress={cancelar}>
-                        <Text style={styles.cancelBtnText}>Cancelar</Text>
+                        <Text style={styles.cancelBtnText}>Nao, cancelar</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -403,9 +970,16 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     fontSize: 14,
-    marginBottom: 12,
+    marginBottom: 8,
     color: "#10233f",
     fontWeight: "600",
+    lineHeight: 21,
+  },
+  confirmHint: {
+    fontSize: 13,
+    marginBottom: 14,
+    color: "#5f7087",
+    lineHeight: 19,
   },
   confirmButtons: {
     flexDirection: "row",

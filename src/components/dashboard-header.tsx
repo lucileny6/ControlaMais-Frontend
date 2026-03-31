@@ -51,6 +51,17 @@ function getStringClaim(payload: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+function formatNameFromEmail(email?: string) {
+  const localPart = String(email ?? "").trim().split("@")[0] ?? "";
+  if (!localPart) return "";
+
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function resolveUserName(user: User | null) {
   if (!user) return "";
 
@@ -75,7 +86,7 @@ function resolveUserName(user: User | null) {
     return value;
   }
 
-  return "";
+  return formatNameFromEmail(user.email);
 }
 
 function resolveAvatarInitial(displayName: string) {

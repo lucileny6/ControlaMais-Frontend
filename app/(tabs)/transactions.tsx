@@ -5,7 +5,7 @@ import { TransactionList } from "@/components/transaction-list";
 import { apiService } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +15,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -33,6 +32,8 @@ interface Transaction {
   date: string;
   notes?: string;
   recorrente?: boolean;
+  recurrenceMonths?: number;
+  createdViaChat?: boolean;
 }
 
 interface ExportRow {
@@ -53,11 +54,80 @@ interface ExportContext {
 }
 
 const DASHBOARD_GRADIENT = ["#F4F7FB", "#EAF1F8", "#E2ECF6", "#DCE7F4"] as const;
-const RECURRING_OCCURRENCES_TOTAL = 12;
+const MONTH_SHORT_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"] as const;
+const getCurrentMonthValue = () =>
+  `${String(new Date().getMonth() + 1).padStart(2, "0")}-${new Date().getFullYear()}`;
+const normalizeCategoryKey = (value: string) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+const normalizeTransactionCategory = (
+  value: string,
+  type: Transaction["type"] | TransactionFormData["type"],
+) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "Sem categoria";
+  if (type === "income") return raw;
+
+  const normalized = normalizeCategoryKey(raw);
+
+  if (["investimento", "investimentos", "aplicacao", "aporte"].includes(normalized)) {
+    return "Investimento";
+  }
+  if (["moradia", "aluguel", "condominio", "agua", "luz", "energia", "internet", "gas", "iptu"].includes(normalized)) {
+    return "Moradia";
+  }
+  if (["alimentacao", "mercado", "supermercado", "feira", "padaria", "acougue", "sacolao", "hortifruti"].includes(normalized)) {
+    return "Alimentacao";
+  }
+  if (["restaurante", "delivery", "ifood", "lanche", "pizza", "hamburguer"].includes(normalized)) {
+    return "Restaurante";
+  }
+  if (["transporte", "uber", "99", "combustivel", "gasolina", "transporte publico", "onibus", "metro", "estacionamento"].includes(normalized)) {
+    return "Transporte";
+  }
+  if (["saude", "medicamentos", "medicamento", "farmacia", "consulta", "plano de saude", "academia"].includes(normalized)) {
+    return "Saude";
+  }
+  if (["lazer", "streaming", "cinema", "viagens", "viagem", "show", "bar", "festa"].includes(normalized)) {
+    return "Lazer";
+  }
+  if (["compras", "shopping", "roupa", "presente"].includes(normalized)) {
+    return "Compras";
+  }
+  if (["educacao", "curso", "faculdade", "escola", "livro", "livros"].includes(normalized)) {
+    return "Educacao";
+  }
+  if (["pet", "pets", "racao", "veterinario"].includes(normalized)) {
+    return "Pets";
+  }
+  if (["assinatura", "assinaturas", "software", "app"].includes(normalized)) {
+    return "Assinaturas";
+  }
+  if (["tecnologia", "celular", "computador", "eletronico", "eletronicos"].includes(normalized)) {
+    return "Tecnologia";
+  }
+  if (["outros", "outras", "diversos", "diversas"].includes(normalized)) {
+    return "Outros";
+  }
+
+  return raw;
+};
 
 export default function TransactionsPage() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ new?: string | string[]; type?: string | string[]; source?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    new?: string | string[];
+    type?: string | string[];
+    source?: string | string[];
+    category?: string | string[];
+    description?: string | string[];
+    amount?: string | string[];
+    date?: string | string[];
+    notes?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
@@ -74,9 +144,12 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [quickActionType, setQuickActionType] = useState<"income" | "expense" | null>(null);
+  const [prefilledTransaction, setPrefilledTransaction] = useState<Partial<TransactionFormData> | null>(null);
   const [openedFromDashboard, setOpenedFromDashboard] = useState(false);
   const [periodPromptOpen, setPeriodPromptOpen] = useState(false);
-  const [monthDraft, setMonthDraft] = useState(`${String(new Date().getMonth() + 1).padStart(2, "0")}-${new Date().getFullYear()}`);
+  const [deleteMonthPromptOpen, setDeleteMonthPromptOpen] = useState(false);
+  const [monthDraft, setMonthDraft] = useState(getCurrentMonthValue());
+  const [yearDraft, setYearDraft] = useState(new Date().getFullYear());
   const [initialPeriod, setInitialPeriod] = useState({ startDate: "", endDate: "" });
   const [periodSyncToken, setPeriodSyncToken] = useState(0);
   const [selectedMonthLabel, setSelectedMonthLabel] = useState("");
@@ -85,7 +158,7 @@ export default function TransactionsPage() {
   const monthNames = [
     "Janeiro",
     "Fevereiro",
-    "Marco",
+    "Março",
     "Abril",
     "Maio",
     "Junho",
@@ -96,6 +169,62 @@ export default function TransactionsPage() {
     "Novembro",
     "Dezembro",
   ];
+
+  const normalizeComparableDate = (value: string) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const brSlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const brDash = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+    if (isoDate.test(raw)) return raw;
+    if (brSlash.test(raw)) {
+      const [, day, month, year] = raw.match(brSlash)!;
+      return `${year}-${month}-${day}`;
+    }
+    if (brDash.test(raw)) {
+      const [, day, month, year] = raw.match(brDash)!;
+      return `${year}-${month}-${day}`;
+    }
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return "";
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const normalizeSeriesText = (value: string) => String(value ?? "").trim().toLowerCase();
+
+  const hasValidDeleteCandidates = (transaction: Transaction) =>
+    (transaction.deleteCandidates ?? []).some((candidate) => {
+      const normalized = String(candidate ?? "").trim();
+      return (
+        normalized.length > 0 &&
+        !normalized.startsWith("tx-local-") &&
+        !/^tx-\d+$/.test(normalized)
+      );
+    });
+
+  const buildSeriesMatcher = (reference: Pick<Transaction, "type" | "amount" | "description" | "category">) =>
+    (transaction: Transaction) =>
+      transaction.type === reference.type &&
+      Math.abs(Number(transaction.amount ?? 0) - Number(reference.amount ?? 0)) < 0.001 &&
+      normalizeSeriesText(transaction.description) === normalizeSeriesText(reference.description) &&
+      normalizeSeriesText(transaction.category) === normalizeSeriesText(reference.category);
+
+  const getRecurringSeriesTransactions = (reference: Transaction) =>
+    Array.from(
+      new Map(
+        transactions
+          .filter(buildSeriesMatcher(reference))
+          .sort((left, right) =>
+            normalizeComparableDate(left.date).localeCompare(normalizeComparableDate(right.date)),
+          )
+          .map((item) => [item.backendId ?? item.id, item]),
+      ).values(),
+    );
 
   const getPeriodFromMonth = (value: string) => {
     const normalized = String(value ?? "").trim();
@@ -118,10 +247,89 @@ export default function TransactionsPage() {
     };
   };
 
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: 6 }, (_, index) => currentYear - index);
+  const getMonthValueFromDate = (value: string) => {
+    const normalized = normalizeComparableDate(value);
+    if (!normalized) return "";
+    return `${normalized.slice(5, 7)}-${normalized.slice(0, 4)}`;
+  };
+
+  const getNextMonthValue = (value: string) => {
+    const period = getPeriodFromMonth(value);
+    if (!period) return getCurrentMonthValue();
+
+    const baseDate = new Date(
+      Number(period.startDate.slice(0, 4)),
+      Number(period.startDate.slice(5, 7)) - 1,
+      1,
+    );
+    baseDate.setMonth(baseDate.getMonth() + 1);
+
+    return `${String(baseDate.getMonth() + 1).padStart(2, "0")}-${baseDate.getFullYear()}`;
+  };
+
+  const moveDateToMonth = (value: string, monthValue: string) => {
+    const normalized = normalizeComparableDate(value);
+    const targetPeriod = getPeriodFromMonth(monthValue);
+    if (!normalized || !targetPeriod) return normalized || "";
+
+    const day = Number(normalized.slice(8, 10));
+    const targetYear = Number(targetPeriod.startDate.slice(0, 4));
+    const targetMonth = Number(targetPeriod.startDate.slice(5, 7));
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    const safeDay = Math.min(day, lastDay);
+
+    return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
+  };
+
+  const getTransactionsForMonth = (monthValue: string, sourceTransactions: Transaction[] = transactions) => {
+    const period = getPeriodFromMonth(monthValue);
+    if (!period) return [];
+
+    const monthKey = period.startDate.slice(0, 7);
+    return Array.from(
+      new Map(
+        sourceTransactions
+          .filter((transaction) => normalizeComparableDate(transaction.date).slice(0, 7) === monthKey)
+          .map((transaction) => [transaction.backendId ?? transaction.id, transaction]),
+      ).values(),
+    );
+  };
+
+  const applyMonthPeriod = (value?: string) => {
+    if (!value) {
+      setInitialPeriod({ startDate: "", endDate: "" });
+      setPeriodSyncToken((current) => current + 1);
+      setSelectedMonthLabel("");
+      setMonthDraft(getCurrentMonthValue());
+      setYearDraft(new Date().getFullYear());
+      setPeriodPromptOpen(false);
+      return;
+    }
+
+    const monthPeriod = getPeriodFromMonth(value);
+    if (!monthPeriod) {
+      showMessage("Mês inválido", "Não foi possível aplicar este período.");
+      return;
+    }
+
+    setInitialPeriod({
+      startDate: monthPeriod.startDate,
+      endDate: monthPeriod.endDate,
+    });
+    setPeriodSyncToken((current) => current + 1);
+    setSelectedMonthLabel(monthPeriod.label);
+    setMonthDraft(value);
+    setYearDraft(Number(value.slice(3, 7)));
+    setPeriodPromptOpen(false);
+  };
+
   const resetModalState = () => {
     setModalOpen(false);
     setEditingTransaction(null);
     setQuickActionType(null);
+    setPrefilledTransaction(null);
     setOpenedFromDashboard(false);
   };
 
@@ -134,26 +342,212 @@ export default function TransactionsPage() {
   };
 
   const modalTitle = editingTransaction
-    ? "Editar Transacao"
+    ? "Editar Transação"
     : quickActionType === "income"
       ? "Nova Receita"
       : quickActionType === "expense"
         ? "Nova Despesa"
-        : "Nova Transacao";
-  const pageTitle = selectedMonthLabel ? `Transacoes - ${selectedMonthLabel}` : "Transacoes";
+        : "Nova Transação";
+  const pageTitle = selectedMonthLabel ? `Transações - ${selectedMonthLabel}` : "Transações";
+
+  const effectiveModalTitle =
+    !editingTransaction && prefilledTransaction?.category === "Investimento"
+      ? "Nova Meta de Investimento"
+      : modalTitle;
 
   const openPeriodPrompt = () => {
     const currentMonth = initialPeriod.startDate
       ? `${initialPeriod.startDate.slice(5, 7)}-${initialPeriod.startDate.slice(0, 4)}`
-      : `${String(new Date().getMonth() + 1).padStart(2, "0")}-${new Date().getFullYear()}`;
+      : getCurrentMonthValue();
     setMonthDraft(currentMonth);
+    setYearDraft(Number(currentMonth.slice(3, 7)));
     setPeriodPromptOpen(true);
+  };
+
+  const executeCopyCurrentMonthToNext = async () => {
+    const sourceMonthValue = initialPeriod.startDate
+      ? `${initialPeriod.startDate.slice(5, 7)}-${initialPeriod.startDate.slice(0, 4)}`
+      : getCurrentMonthValue();
+    const targetMonthValue = getNextMonthValue(sourceMonthValue);
+    const sourcePeriod = getPeriodFromMonth(sourceMonthValue);
+    const targetPeriod = getPeriodFromMonth(targetMonthValue);
+    const activeCopyFilter = exportContext.filterType;
+
+    if (!sourcePeriod || !targetPeriod) {
+      showMessage("Erro", "Não foi possível identificar o mês para copiar.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const currentTransactions = await loadTransactions();
+      const monthTransactions = getTransactionsForMonth(sourceMonthValue, currentTransactions).filter(
+        (transaction) => activeCopyFilter === "all" || transaction.type === activeCopyFilter,
+      );
+      const skippedRecurringTransactions = monthTransactions.filter((transaction) => transaction.recorrente);
+      const skippedRecurringCount = skippedRecurringTransactions.length;
+      const sourceTransactions = monthTransactions.filter(
+        (transaction) =>
+          !transaction.recorrente,
+      );
+
+      if (sourceTransactions.length === 0) {
+        const filterLabel =
+          activeCopyFilter === "income"
+            ? "receitas normais"
+            : activeCopyFilter === "expense"
+              ? "despesas normais"
+              : "lançamentos normais";
+        const recurringHint =
+          skippedRecurringCount > 0
+            ? ` ${skippedRecurringCount} lançamentos recorrentes foram ignorados.`
+            : "";
+        showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}`);
+        return;
+      }
+
+      let createdCount = 0;
+      let failedCount = 0;
+      const failedTransactionLabels: string[] = [];
+
+      for (const transaction of sourceTransactions) {
+        const targetDate = moveDateToMonth(transaction.date, targetMonthValue);
+        const payload = {
+          descricao: transaction.description,
+          valor: transaction.amount,
+          categoria: transaction.category,
+          data: targetDate,
+          observacao: transaction.notes,
+          recorrente: false,
+          recurring: false,
+        };
+
+        try {
+          if (transaction.type === "expense") {
+            await apiService.createDespesa(payload);
+          } else {
+            await apiService.createReceita(payload);
+          }
+
+          createdCount += 1;
+        } catch {
+          failedCount += 1;
+          failedTransactionLabels.push(`${transaction.description} (${transaction.category})`);
+        }
+      }
+
+      await loadTransactions();
+
+      const resultLabel =
+        activeCopyFilter === "income"
+          ? "receitas"
+          : activeCopyFilter === "expense"
+            ? "despesas"
+            : "lançamentos";
+      let resultMessage = `${createdCount} ${resultLabel} foram copiados de ${sourcePeriod.label} para ${targetPeriod.label}. Você continua visualizando ${sourcePeriod.label}.`;
+      if (skippedRecurringCount > 0) {
+        const recurringPreview = skippedRecurringTransactions
+          .slice(0, 3)
+          .map((transaction) => `${transaction.description} (${transaction.category})`)
+          .join(", ");
+        resultMessage = `${resultMessage} ${skippedRecurringCount} lançamentos recorrentes foram ignorados.${recurringPreview ? ` Ex.: ${recurringPreview}.` : ""}`;
+      }
+      if (failedCount > 0) {
+        const failedPreview = failedTransactionLabels.slice(0, 3).join(", ");
+        resultMessage = `${resultMessage} ${failedCount} não puderam ser copiados.${failedPreview ? ` Ex.: ${failedPreview}.` : ""}`;
+      }
+
+      showMessage("Sucesso", resultMessage);
+    } catch (error: any) {
+      const message = String(error?.message ?? "Não foi possível copiar o mês.");
+      showMessage("Erro", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyCurrentMonth = () => {
+    const sourceMonthValue = initialPeriod.startDate
+      ? getMonthValueFromDate(initialPeriod.startDate)
+      : getCurrentMonthValue();
+    const sourcePeriod = getPeriodFromMonth(sourceMonthValue);
+    const targetPeriod = getPeriodFromMonth(getNextMonthValue(sourceMonthValue));
+    const activeCopyFilter = exportContext.filterType;
+    const monthTransactions = getTransactionsForMonth(sourceMonthValue).filter(
+        (transaction) =>
+        (activeCopyFilter === "all" || transaction.type === activeCopyFilter),
+    );
+    const skippedRecurringTransactions = monthTransactions.filter((transaction) => transaction.recorrente);
+    const skippedRecurringCount = skippedRecurringTransactions.length;
+    const sourceTransactions = monthTransactions.filter((transaction) => !transaction.recorrente);
+
+    if (!sourcePeriod || !targetPeriod) {
+      showMessage("Erro", "Não foi possível identificar o mês atual.");
+      return;
+    }
+
+    if (sourceTransactions.length === 0) {
+      const filterLabel =
+        activeCopyFilter === "income"
+          ? "receitas normais"
+          : activeCopyFilter === "expense"
+            ? "despesas normais"
+            : "lançamentos normais";
+      const recurringHint =
+        skippedRecurringCount > 0
+          ? ` ${skippedRecurringCount} lançamentos recorrentes serão ignorados.`
+          : "";
+      showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}`);
+      return;
+    }
+
+    const confirmLabel =
+      activeCopyFilter === "income"
+        ? "receitas"
+        : activeCopyFilter === "expense"
+          ? "despesas"
+          : "lançamentos";
+    const recurringHint =
+      skippedRecurringCount > 0
+        ? ` ${skippedRecurringCount} recorrentes serão ignorados.`
+        : "";
+    const confirmMessage = `Copiar ${sourceTransactions.length} ${confirmLabel} de ${sourcePeriod.label} para ${targetPeriod.label}?${recurringHint}`;
+
+    if (Platform.OS === "web") {
+      const webEnv = globalThis as { confirm?: (message?: string) => boolean };
+      const confirmed = webEnv.confirm?.(confirmMessage);
+      if (confirmed) {
+        void executeCopyCurrentMonthToNext();
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Copiar mês",
+      confirmMessage,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Copiar",
+          onPress: () => {
+            void executeCopyCurrentMonthToNext();
+          },
+        },
+      ],
+    );
   };
 
   useEffect(() => {
     checkAuthentication();
     loadTransactions();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadTransactions();
+    }, []),
+  );
 
   useEffect(() => {
     const pickParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value) ?? "";
@@ -164,13 +558,29 @@ export default function TransactionsPage() {
     const normalizedType: "income" | "expense" =
       rawType === "income" || rawType === "receita" ? "income" : "expense";
     const source = pickParam(params.source).toLowerCase().trim();
+    const category = pickParam(params.category).trim();
+    const description = pickParam(params.description).trim();
+    const amount = pickParam(params.amount).trim();
+    const date = pickParam(params.date).trim();
+    const notes = pickParam(params.notes).trim();
+    const normalizedParamCategory = category
+      ? normalizeTransactionCategory(category, normalizedType)
+      : "";
 
     setEditingTransaction(null);
     setQuickActionType(normalizedType);
+    setPrefilledTransaction({
+      type: normalizedType,
+      ...(normalizedParamCategory ? { category: normalizedParamCategory } : {}),
+      ...(description ? { description } : {}),
+      ...(amount ? { amount: Number(amount.replace(",", ".")) } : {}),
+      ...(date ? { date } : {}),
+      ...(notes ? { notes } : {}),
+    });
     setOpenedFromDashboard(source === "dashboard");
     setModalOpen(true);
     router.replace("/(tabs)/transactions");
-  }, [params.new, params.type, params.source, router]);
+  }, [params.new, params.type, params.source, params.category, params.description, params.amount, params.date, params.notes, router]);
 
   useEffect(() => {
     const pickParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value) ?? "";
@@ -283,30 +693,37 @@ export default function TransactionsPage() {
 
       const normalized = (data ?? []).map((t: any, index: number): Transaction => {
         const ids = resolveTransactionIds(t, index);
-        return {
-        backendId: ids.primaryId,
-        id: "",
-        deleteCandidates: ids.candidates,
-        description: String(
+        const notes = String(t?.notes ?? t?.observacao ?? "").trim();
+        const description = String(
           t?.description ??
             t?.descricao ??
             t?.nome ??
             t?.titulo ??
             t?.historico ??
             "Sem descricao",
-        ),
+        );
+        const originSignature = `${notes} ${description}`
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        const rawType = String(t?.type ?? t?.tipo ?? "").toLowerCase().trim();
+        const resolvedType =
+          rawType === "income" ||
+          rawType === "icome" ||
+          rawType === "receita" ||
+          rawType === "entrada"
+            ? "income"
+            : "expense";
+        const rawCategory = String(t?.category ?? t?.categoria ?? "Sem categoria");
+
+        return {
+        backendId: ids.primaryId,
+        id: "",
+        deleteCandidates: ids.candidates,
+        description,
         amount: Number(t?.amount ?? t?.valor ?? t?.value ?? t?.preco ?? 0),
-        type: (() => {
-          const rawType = String(t?.type ?? t?.tipo ?? "").toLowerCase().trim();
-          if (
-            rawType === "income" ||
-            rawType === "icome" ||
-            rawType === "receita" ||
-            rawType === "entrada"
-          ) return "income";
-          return "expense";
-        })(),
-        category: String(t?.category ?? t?.categoria ?? "Sem categoria"),
+        type: resolvedType,
+        category: normalizeTransactionCategory(rawCategory, resolvedType),
         date: String(
           t?.date ??
             t?.data ??
@@ -316,8 +733,12 @@ export default function TransactionsPage() {
             t?.createdAt ??
             new Date().toISOString(),
         ),
-        notes: t?.notes ?? t?.observacao ?? undefined,
+        notes: notes || undefined,
         recorrente: Boolean(t?.recorrente ?? t?.recurring ?? t?.isRecurring ?? t?.recorrencia),
+        createdViaChat:
+          originSignature.includes("[chat]") ||
+          originSignature.includes("criado via chat") ||
+          originSignature.includes("lancamento via chat"),
       };
     }).map((transaction, index) => ({
         ...transaction,
@@ -345,6 +766,7 @@ export default function TransactionsPage() {
     try {
       setLoading(true);
       let successMessage = "";
+      const normalizedCategory = normalizeTransactionCategory(data.category, data.type);
 
       const normalizeDateToIso = (value: string) => {
         const raw = String(value ?? "").trim();
@@ -369,12 +791,17 @@ export default function TransactionsPage() {
       const payload = {
         descricao: data.description,
         valor: data.amount,
-        categoria: data.category,
+        categoria: normalizedCategory,
         data: normalizeDateToIso(data.date),
         observacao: data.notes,
         recorrente: data.recorrente,
         recurring: data.recorrente,
       };
+      const recurringOccurrencesTotal = data.recorrente
+        ? Math.max(1, Math.floor(Number(data.recurrenceMonths ?? 12)))
+        : 1;
+      const formatRecurringMonthCount = (value: number) =>
+        `${value} ${value === 1 ? "mes" : "meses"}`;
 
       const parseIsoDateParts = (value: string) => {
         const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -401,7 +828,7 @@ export default function TransactionsPage() {
 
       const buildRecurringPayloads = () => {
         const baseDate = payload.data;
-        const generated = Array.from({ length: RECURRING_OCCURRENCES_TOTAL }, (_, index) => ({
+        const generated = Array.from({ length: recurringOccurrencesTotal }, (_, index) => ({
           ...payload,
           data: addMonthsToIsoDate(baseDate, index),
         }));
@@ -411,39 +838,12 @@ export default function TransactionsPage() {
         );
         return generated;
       };
-
-      const normalizeComparableDate = (value: string) => {
-        const raw = String(value ?? "").trim();
-        if (!raw) return "";
-        const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
-        const brSlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-        const brDash = /^(\d{2})-(\d{2})-(\d{4})$/;
-
-        if (isoDate.test(raw)) return raw;
-        if (brSlash.test(raw)) {
-          const [, day, month, year] = raw.match(brSlash)!;
-          return `${year}-${month}-${day}`;
-        }
-        if (brDash.test(raw)) {
-          const [, day, month, year] = raw.match(brDash)!;
-          return `${year}-${month}-${day}`;
-        }
-
-        const parsed = new Date(raw);
-        if (Number.isNaN(parsed.getTime())) return "";
-        const year = parsed.getFullYear();
-        const month = String(parsed.getMonth() + 1).padStart(2, "0");
-        const day = String(parsed.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      };
-
-      const normalizeText = (value: string) => String(value ?? "").trim().toLowerCase();
       const matchesRecurringSeries = (transaction: Transaction) => {
         return (
           transaction.type === data.type &&
           Math.abs(Number(transaction.amount ?? 0) - Number(data.amount ?? 0)) < 0.001 &&
-          normalizeText(transaction.description) === normalizeText(data.description) &&
-          normalizeText(transaction.category) === normalizeText(data.category)
+          normalizeSeriesText(transaction.description) === normalizeSeriesText(data.description) &&
+          normalizeSeriesText(transaction.category) === normalizeSeriesText(normalizedCategory)
         );
       };
       const justSavedMatches = (transaction: Transaction) => {
@@ -482,7 +882,7 @@ export default function TransactionsPage() {
             ? apiService.createDespesa(dto)
             : apiService.createReceita({
                 ...dto,
-                categoria: data.category,
+                categoria: normalizedCategory,
               });
 
         const creationResults = await Promise.allSettled(
@@ -499,26 +899,100 @@ export default function TransactionsPage() {
           successMessage = `Foram salvas ${creationResults.length - failedCreations.length} de ${creationResults.length} recorrencias. Verifique os meses restantes.`;
         } else {
           successMessage = data.recorrente
-            ? `Transacao recorrente cadastrada para ${RECURRING_OCCURRENCES_TOTAL} meses.`
+            ? `Transacao recorrente cadastrada para ${formatRecurringMonthCount(recurringOccurrencesTotal)}.`
             : "Transacao cadastrada com sucesso!";
         }
       }
 
       let latestTransactions = await loadTransactions();
 
-      if (editingTransaction && data.recorrente) {
-        const expectedDates = buildRecurringPayloads().map((item) => item.data);
-        const matchedDates = latestTransactions
-          .filter(matchesRecurringSeries)
-          .map((transaction) => normalizeComparableDate(transaction.date))
-          .filter(Boolean);
+      if (editingTransaction && editingTransaction.recorrente && !data.recorrente) {
+        const futureSeriesTransactions = getRecurringSeriesTransactions(editingTransaction).filter(
+          (transaction) =>
+            normalizeComparableDate(transaction.date) > normalizeComparableDate(editingTransaction.date),
+        );
 
-        const missingDates = expectedDates.filter((date) => !matchedDates.includes(date));
+        let deletedFutureCount = 0;
+        let failedFutureCount = 0;
 
-        if (missingDates.length > 0) {
-          const missingPayloads = buildRecurringPayloads().filter((item) =>
-            missingDates.includes(item.data),
-          );
+        for (const transactionToDelete of futureSeriesTransactions) {
+          let deletedFuture = false;
+
+          for (const candidateId of transactionToDelete.deleteCandidates ?? []) {
+            try {
+              await apiService.deleteTransaction(candidateId, transactionToDelete.type);
+              deletedFuture = true;
+              deletedFutureCount += 1;
+              break;
+            } catch {
+              // Continue trying other candidate IDs for the same transaction.
+            }
+          }
+
+          if (!deletedFuture) {
+            failedFutureCount += 1;
+          }
+        }
+
+        latestTransactions = await loadTransactions();
+
+        if (deletedFutureCount > 0) {
+          successMessage = `${successMessage} ${deletedFutureCount} recorrencias futuras foram removidas.`;
+        }
+
+        if (failedFutureCount > 0) {
+          successMessage = `${successMessage} ${failedFutureCount} recorrencias futuras nao puderam ser removidas.`;
+        }
+      } else if (editingTransaction && data.recorrente) {
+        const originalSeriesTransactions = getRecurringSeriesTransactions(editingTransaction).filter(
+          (transaction) =>
+            normalizeComparableDate(transaction.date) >= normalizeComparableDate(editingTransaction.date),
+        );
+        const expectedPayloads = buildRecurringPayloads();
+        const futureExpectedPayloads = expectedPayloads.slice(1);
+        const futureSeriesTransactions = originalSeriesTransactions.filter(
+          (transaction) =>
+            normalizeComparableDate(transaction.date) > normalizeComparableDate(editingTransaction.date),
+        );
+        const transactionsToUpdate = futureSeriesTransactions.slice(0, futureExpectedPayloads.length);
+        const payloadsToCreate = futureExpectedPayloads.slice(transactionsToUpdate.length);
+        const transactionsToDelete = futureSeriesTransactions.slice(futureExpectedPayloads.length);
+
+        let updatedFutureCount = 0;
+        let createdFutureCount = 0;
+        let deletedFutureCount = 0;
+        let failedFutureCount = 0;
+
+        for (let index = 0; index < transactionsToUpdate.length; index += 1) {
+          const transactionToUpdate = transactionsToUpdate[index];
+          const nextPayload = futureExpectedPayloads[index];
+          let updatedFuture = false;
+
+          for (const candidateId of transactionToUpdate.deleteCandidates ?? []) {
+            try {
+              await apiService.updateTransaction(
+                candidateId,
+                {
+                  ...nextPayload,
+                  type: data.type,
+                  tipo: data.type,
+                },
+                transactionToUpdate.type,
+              );
+              updatedFuture = true;
+              updatedFutureCount += 1;
+              break;
+            } catch {
+              // Continue trying other candidate IDs for the same transaction.
+            }
+          }
+
+          if (!updatedFuture) {
+            failedFutureCount += 1;
+          }
+        }
+
+        if (payloadsToCreate.length > 0) {
           const createTransaction = (dto: typeof payload) =>
             data.type === "expense"
               ? apiService.createDespesa(dto)
@@ -528,29 +1002,60 @@ export default function TransactionsPage() {
                 });
 
           const creationResults = await Promise.allSettled(
-            missingPayloads.map((item) => createTransaction(item)),
+            payloadsToCreate.map((item) => createTransaction(item)),
           );
-          const createdCount = creationResults.filter((result) => result.status === "fulfilled").length;
-          const failedCount = creationResults.length - createdCount;
-
-          latestTransactions = await loadTransactions();
-
-          if (createdCount > 0) {
-            successMessage = `${successMessage} ${createdCount} recorrencias futuras foram criadas.`;
-          }
-
-          if (failedCount > 0) {
-            successMessage = `${successMessage} ${failedCount} recorrencias futuras nao puderam ser criadas.`;
-          }
-
-          console.log("[Transactions] edit recurring backfill:", {
-            expectedDates,
-            matchedDates,
-            missingDates,
-            createdCount,
-            failedCount,
-          });
+          createdFutureCount = creationResults.filter((result) => result.status === "fulfilled").length;
+          failedFutureCount += creationResults.length - createdFutureCount;
         }
+
+        if (transactionsToDelete.length > 0) {
+          for (const transactionToDelete of transactionsToDelete) {
+            let deletedFuture = false;
+
+            for (const candidateId of transactionToDelete.deleteCandidates ?? []) {
+              try {
+                await apiService.deleteTransaction(candidateId, transactionToDelete.type);
+                deletedFuture = true;
+                deletedFutureCount += 1;
+                break;
+              } catch {
+                // Continue trying other candidate IDs for the same transaction.
+              }
+            }
+
+            if (!deletedFuture) {
+              failedFutureCount += 1;
+            }
+          }
+        }
+
+        latestTransactions = await loadTransactions();
+
+        if (updatedFutureCount > 0) {
+          successMessage = `${successMessage} ${updatedFutureCount} recorrencias futuras foram atualizadas.`;
+        }
+
+        if (createdFutureCount > 0) {
+          successMessage = `${successMessage} ${createdFutureCount} recorrencias futuras foram criadas.`;
+        }
+
+        if (deletedFutureCount > 0) {
+          successMessage = `${successMessage} ${deletedFutureCount} recorrencias futuras excedentes foram removidas.`;
+        }
+
+        if (failedFutureCount > 0) {
+          successMessage = `${successMessage} ${failedFutureCount} recorrencias futuras nao puderam ser sincronizadas.`;
+        }
+
+        console.log("[Transactions] edit recurring sync:", {
+          recurringOccurrencesTotal,
+          originalSeriesCount: originalSeriesTransactions.length,
+          updatedFutureCount,
+          createdFutureCount,
+          deletedFutureCount,
+          failedFutureCount,
+          expectedDates: expectedPayloads.map((item) => item.data),
+        });
       }
 
       if (!editingTransaction) {
@@ -595,7 +1100,7 @@ export default function TransactionsPage() {
               description: data.description,
               amount: data.amount,
               type: data.type,
-              category: data.category,
+              category: normalizedCategory,
               date: payload.data,
               notes: data.notes,
               recorrente: data.recorrente,
@@ -648,50 +1153,11 @@ export default function TransactionsPage() {
 
   const executeDeleteSeries = async (transaction: Transaction) => {
     try {
-      const normalizeText = (value: string) => String(value ?? "").trim().toLowerCase();
-      const normalizeComparableDate = (value: string) => {
-        const raw = String(value ?? "").trim();
-        if (!raw) return "";
-
-        const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
-        const brSlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-        const brDash = /^(\d{2})-(\d{2})-(\d{4})$/;
-
-        if (isoDate.test(raw)) return raw;
-        if (brSlash.test(raw)) {
-          const [, day, month, year] = raw.match(brSlash)!;
-          return `${year}-${month}-${day}`;
-        }
-        if (brDash.test(raw)) {
-          const [, day, month, year] = raw.match(brDash)!;
-          return `${year}-${month}-${day}`;
-        }
-
-        const parsed = new Date(raw);
-        if (Number.isNaN(parsed.getTime())) return "";
-        const year = parsed.getFullYear();
-        const month = String(parsed.getMonth() + 1).padStart(2, "0");
-        const day = String(parsed.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      };
-
       const seriesTransactions = transactions.filter((item) => {
-        const validDeleteCandidates = (item.deleteCandidates ?? []).filter((candidate) => {
-          const normalized = String(candidate ?? "").trim();
-          return (
-            normalized.length > 0 &&
-            !normalized.startsWith("tx-local-") &&
-            !/^tx-\d+$/.test(normalized)
-          );
-        });
-
         return (
-          item.type === transaction.type &&
-          Math.abs(Number(item.amount ?? 0) - Number(transaction.amount ?? 0)) < 0.001 &&
-          normalizeText(item.description) === normalizeText(transaction.description) &&
-          normalizeText(item.category) === normalizeText(transaction.category) &&
+          buildSeriesMatcher(transaction)(item) &&
           normalizeComparableDate(item.date) >= normalizeComparableDate(transaction.date) &&
-          validDeleteCandidates.length > 0
+          hasValidDeleteCandidates(item)
         );
       });
 
@@ -746,26 +1212,143 @@ export default function TransactionsPage() {
   };
 
   const handleEdit = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
+    const currentDate = normalizeComparableDate(transaction.date);
+    const recurrenceMonths = transaction.recorrente
+      ? Math.max(
+          1,
+          getRecurringSeriesTransactions(transaction).filter(
+            (item) => normalizeComparableDate(item.date) >= currentDate,
+          ).length,
+        )
+      : undefined;
+
+    setEditingTransaction({
+      ...transaction,
+      ...(recurrenceMonths ? { recurrenceMonths } : {}),
+    });
+    setPrefilledTransaction(null);
     setQuickActionType(null);
     setOpenedFromDashboard(false);
     setModalOpen(true);
+  };
+
+  const getValidDeleteCandidates = (transaction: Transaction) =>
+    (transaction.deleteCandidates ?? []).filter((candidate) => {
+      const normalized = String(candidate ?? "").trim();
+      return (
+        normalized.length > 0 &&
+        !normalized.startsWith("tx-local-") &&
+        !/^tx-\d+$/.test(normalized)
+      );
+    });
+
+  const getDeletableMonthTransactions = (monthValue: string) =>
+    getTransactionsForMonth(monthValue)
+      .filter((transaction) => !transaction.recorrente)
+      .map((transaction) => ({
+        ...transaction,
+        deleteCandidates: getValidDeleteCandidates(transaction),
+      }))
+      .filter((transaction) => transaction.deleteCandidates && transaction.deleteCandidates.length > 0);
+
+  const executeDeleteMonth = async () => {
+    const selectedMonthValue = initialPeriod.startDate
+      ? getMonthValueFromDate(initialPeriod.startDate)
+      : "";
+    const selectedPeriod = getPeriodFromMonth(selectedMonthValue);
+
+    if (!selectedMonthValue || !selectedPeriod) {
+      showMessage("Selecione um mês", "Escolha um mês específico antes de excluir.");
+      return;
+    }
+
+    const monthTransactions = getDeletableMonthTransactions(selectedMonthValue);
+
+    if (monthTransactions.length === 0) {
+      showMessage("Sem lançamentos", `Não há lançamentos normais excluíveis em ${selectedPeriod.label}.`);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setDeleteMonthPromptOpen(false);
+
+      let deletedCount = 0;
+      let failedCount = 0;
+
+      for (const transaction of monthTransactions) {
+        let deleted = false;
+
+        for (const candidateId of transaction.deleteCandidates ?? []) {
+          try {
+            await apiService.deleteTransaction(candidateId, transaction.type);
+            deleted = true;
+            deletedCount += 1;
+            break;
+          } catch {
+            // Continue trying other candidate IDs for the same transaction.
+          }
+        }
+
+        if (!deleted) {
+          failedCount += 1;
+        }
+      }
+
+      if (deletedCount === 0) {
+        throw new Error("Não foi possível excluir os lançamentos deste mês.");
+      }
+
+      await loadTransactions();
+
+      if (failedCount > 0) {
+        showMessage(
+          "Sucesso parcial",
+          `${deletedCount} lançamentos de ${selectedPeriod.label} foram excluídos e ${failedCount} não puderam ser removidos.`,
+        );
+        return;
+      }
+
+      showMessage("Sucesso", `${deletedCount} lançamentos de ${selectedPeriod.label} foram excluídos.`);
+    } catch (error: any) {
+      const message = String(error?.message ?? "Não foi possível excluir o mês selecionado.");
+      showMessage("Erro", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMonth = () => {
+    const selectedMonthValue = initialPeriod.startDate
+      ? getMonthValueFromDate(initialPeriod.startDate)
+      : "";
+    const selectedPeriod = getPeriodFromMonth(selectedMonthValue);
+
+    if (!selectedMonthValue || !selectedPeriod) {
+      showMessage("Selecione um mês", "Escolha um mês específico antes de excluir.");
+      return;
+    }
+
+    const normalCount = getDeletableMonthTransactions(selectedMonthValue).length;
+    const recurringCount = getTransactionsForMonth(selectedMonthValue).filter((transaction) => transaction.recorrente).length;
+
+    if (normalCount === 0) {
+      const recurringHint =
+        recurringCount > 0
+          ? " Os recorrentes precisam ser tratados fora da exclusão em lote para evitar apagar outros meses."
+          : "";
+      showMessage("Sem lançamentos", `Não há lançamentos normais excluíveis em ${selectedPeriod.label}.${recurringHint}`);
+      return;
+    }
+
+    setDeleteMonthPromptOpen(true);
   };
 
   const handleDelete = (id: string) => {
     const transaction = transactions.find((item) => item.id === id);
     if (!transaction) return;
 
-    const validDeleteCandidates = (transaction.deleteCandidates ?? []).filter(
-      (candidate) => {
-        const normalized = String(candidate ?? "").trim();
-        return (
-          normalized.length > 0 &&
-          !normalized.startsWith("tx-local-") &&
-          !/^tx-\d+$/.test(normalized)
-        );
-      },
-    );
+    const validDeleteCandidates = getValidDeleteCandidates(transaction);
 
     if (validDeleteCandidates.length === 0) {
       console.log("[Transactions] delete blocked, no valid candidate:", {
@@ -977,6 +1560,17 @@ export default function TransactionsPage() {
     }, 3000);
   };
 
+  const selectedDeleteMonthValue = initialPeriod.startDate
+    ? getMonthValueFromDate(initialPeriod.startDate)
+    : "";
+  const selectedDeletePeriod = getPeriodFromMonth(selectedDeleteMonthValue);
+  const deleteMonthNormalCount = selectedDeleteMonthValue
+    ? getDeletableMonthTransactions(selectedDeleteMonthValue).length
+    : 0;
+  const deleteMonthRecurringCount = selectedDeleteMonthValue
+    ? getTransactionsForMonth(selectedDeleteMonthValue).filter((transaction) => transaction.recorrente).length
+    : 0;
+
   if (isLoadingAuth) {
     return (
       <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 1]} style={styles.gradient}>
@@ -1008,15 +1602,42 @@ export default function TransactionsPage() {
                 <View style={styles.header}>
                   <View style={styles.titleBlock}>
                     <Text style={styles.title}>{pageTitle}</Text>
-                    <TouchableOpacity style={styles.periodSwitchButton} onPress={openPeriodPrompt}>
-                      <Text style={styles.periodSwitchButtonText}>Trocar Periodo</Text>
+                  </View>
+                  <View style={styles.headerActions}>
+                    <TouchableOpacity
+                      style={[styles.copyMonthButton, loading && styles.headerButtonDisabled]}
+                      onPress={handleCopyCurrentMonth}
+                      disabled={loading}
+                    >
+                      <Text style={styles.copyMonthButtonText}>Copiar mês</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.deleteMonthButton,
+                        (!initialPeriod.startDate || loading) && styles.headerButtonDisabled,
+                      ]}
+                      onPress={handleDeleteMonth}
+                      disabled={!initialPeriod.startDate || loading}
+                    >
+                      <Text style={styles.deleteMonthButtonText}>Excluir mês</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.secondaryHeaderButton, loading && styles.headerButtonDisabled]}
+                      onPress={() => router.push("/(tabs)/goal")}
+                      disabled={loading}
+                    >
+                      <Text style={styles.secondaryHeaderButtonText}>Ver Metas</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.exportButton, loading && styles.headerButtonDisabled]}
+                      onPress={handleExportPdf}
+                      disabled={loading}
+                    >
+                      <Text style={styles.exportButtonText}>Exportar PDF</Text>
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={styles.exportButton} onPress={handleExportPdf}>
-                    <Text style={styles.exportButtonText}>Exportar PDF</Text>
-                  </TouchableOpacity>
                 </View>
-
+<header></header>
                 <TransactionList
                   transactions={transactions}
                   onEdit={handleEdit}
@@ -1024,6 +1645,8 @@ export default function TransactionsPage() {
                   initialStartDate={initialPeriod.startDate}
                   initialEndDate={initialPeriod.endDate}
                   periodSyncToken={periodSyncToken}
+                  periodLabel={selectedMonthLabel}
+                  onOpenPeriodPicker={openPeriodPrompt}
                   onExportContextChange={setExportContext}
                 />
               </View>
@@ -1041,14 +1664,18 @@ export default function TransactionsPage() {
             <Pressable style={styles.modalBackdrop} onPress={closeModal} />
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{modalTitle}</Text>
+                <Text style={styles.modalTitle}>{effectiveModalTitle}</Text>
                 <TouchableOpacity onPress={closeModal} style={styles.modalCloseButton}>
                   <Text style={styles.modalCloseButtonText}>Voltar</Text>
                 </TouchableOpacity>
               </View>
               <TransactionForm
                 onSubmit={handleSubmit}
-                initialData={editingTransaction ?? (quickActionType ? { type: quickActionType } : undefined)}
+                initialData={
+                  editingTransaction ??
+                  prefilledTransaction ??
+                  (quickActionType ? { type: quickActionType } : undefined)
+                }
                 isLoading={loading}
                 onCancel={closeModal}
               />
@@ -1061,6 +1688,7 @@ export default function TransactionsPage() {
           onPress={() => {
             setEditingTransaction(null);
             setQuickActionType(null);
+            setPrefilledTransaction(null);
             setOpenedFromDashboard(false);
             setModalOpen(true);
           }}
@@ -1070,39 +1698,132 @@ export default function TransactionsPage() {
 
         <Modal visible={periodPromptOpen} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-            <Pressable style={styles.modalBackdrop} />
+            <Pressable style={styles.modalBackdrop} onPress={() => setPeriodPromptOpen(false)} />
             <View style={styles.periodPromptContent}>
-              <Text style={styles.periodPromptTitle}>Filtrar por mes</Text>
+              <Text style={styles.periodPromptTitle}>Selecionar período</Text>
               <Text style={styles.periodPromptText}>
-                Informe o mes para abrir a lista ja filtrada.
+                Escolha o ano e toque no mês para aplicar.
               </Text>
 
-              <TextInput
-                style={styles.periodInput}
-                placeholder="Mes (MM-AAAA)"
-                value={monthDraft}
-                onChangeText={setMonthDraft}
-              />
+              <TouchableOpacity
+                style={[
+                  styles.periodQuickOption,
+                  !initialPeriod.startDate && styles.periodQuickOptionActive,
+                ]}
+                onPress={() => applyMonthPeriod()}
+              >
+                <Text
+                  style={[
+                    styles.periodQuickOptionLabel,
+                    !initialPeriod.startDate && styles.periodQuickOptionLabelActive,
+                  ]}
+                >
+                  Todos os períodos
+                </Text>
+                <Text
+                  style={[
+                    styles.periodQuickOptionHint,
+                    !initialPeriod.startDate && styles.periodQuickOptionHintActive,
+                  ]}
+                >
+                  Mostrar todas as transações
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.periodYearRow}>
+                {availableYears.map((year) => {
+                  const isActive = yearDraft === year;
+
+                  return (
+                    <TouchableOpacity
+                      key={year}
+                      style={[styles.periodYearChip, isActive && styles.periodYearChipActive]}
+                      onPress={() => setYearDraft(year)}
+                    >
+                      <Text
+                        style={[styles.periodYearChipText, isActive && styles.periodYearChipTextActive]}
+                      >
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.periodMonthGrid}>
+                {MONTH_SHORT_NAMES.map((monthLabel, index) => {
+                  const monthValue = `${String(index + 1).padStart(2, "0")}-${yearDraft}`;
+                  const isActive = Boolean(initialPeriod.startDate) && monthDraft === monthValue;
+
+                  return (
+                    <TouchableOpacity
+                      key={monthValue}
+                      style={[styles.periodMonthChip, isActive && styles.periodMonthChipActive]}
+                      onPress={() => applyMonthPeriod(monthValue)}
+                    >
+                      <Text
+                        style={[styles.periodMonthChipText, isActive && styles.periodMonthChipTextActive]}
+                      >
+                        {monthLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
               <View style={styles.periodPromptActions}>
                 <TouchableOpacity
-                  style={[styles.periodPromptButton, styles.periodPromptApplyButton]}
-                  onPress={() => {
-                    const monthPeriod = getPeriodFromMonth(monthDraft);
-                    if (!monthPeriod) {
-                      showMessage("Mes invalido", "Use o formato MM-AAAA. Exemplo: 02-2026");
-                      return;
-                    }
-                    setInitialPeriod({
-                      startDate: monthPeriod.startDate,
-                      endDate: monthPeriod.endDate,
-                    });
-                    setPeriodSyncToken((current) => current + 1);
-                    setSelectedMonthLabel(monthPeriod.label);
-                    setPeriodPromptOpen(false);
-                  }}
+                  style={styles.periodPromptButton}
+                  onPress={() => setPeriodPromptOpen(false)}
                 >
-                  <Text style={styles.periodPromptApplyText}>Aplicar mes</Text>
+                  <Text style={styles.periodPromptButtonText}>Fechar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={deleteMonthPromptOpen} animationType="fade" transparent>
+          <View style={styles.modalOverlay}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setDeleteMonthPromptOpen(false)} />
+            <View style={styles.deleteMonthPromptContent}>
+              <Text style={styles.deleteMonthPromptTitle}>Excluir mês</Text>
+              <Text style={styles.deleteMonthPromptText}>
+                {selectedDeletePeriod
+                  ? `A exclusão em lote vai remover apenas lançamentos normais de ${selectedDeletePeriod.label}.`
+                  : "Escolha o que deseja excluir no mês selecionado."}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.deleteMonthOptionButton,
+                  deleteMonthNormalCount === 0 && styles.headerButtonDisabled,
+                ]}
+                onPress={() => {
+                  void executeDeleteMonth();
+                }}
+                disabled={deleteMonthNormalCount === 0 || loading}
+              >
+                <Text style={styles.deleteMonthOptionTitle}>Excluir normais</Text>
+                <Text style={styles.deleteMonthOptionText}>
+                  {deleteMonthNormalCount} lançamentos excluíveis
+                </Text>
+              </TouchableOpacity>
+              {deleteMonthRecurringCount > 0 && (
+                <View style={[styles.deleteMonthOptionButton, styles.deleteMonthOptionInfo]}>
+                  <Text style={styles.deleteMonthOptionTitle}>Recorrentes protegidos</Text>
+                  <Text style={styles.deleteMonthOptionText}>
+                    {deleteMonthRecurringCount} recorrentes deste mês não entram na exclusão em lote para evitar apagar outros meses.
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.deleteMonthPromptActions}>
+                <TouchableOpacity
+                  style={styles.periodPromptButton}
+                  onPress={() => setDeleteMonthPromptOpen(false)}
+                >
+                  <Text style={styles.periodPromptButtonText}>Cancelar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1188,23 +1909,38 @@ const styles = StyleSheet.create({
   titleBlock: {
     gap: 10,
   },
-  periodSwitchButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.28)",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  headerActions: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
   },
-  periodSwitchButtonText: {
-    color: "#334155",
-    fontSize: 12,
+  headerButtonDisabled: {
+    opacity: 0.6,
+  },
+  copyMonthButton: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.28)",
+  },
+  copyMonthButtonText: {
+    color: "#1d4ed8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  deleteMonthButton: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(220, 38, 38, 0.24)",
+  },
+  deleteMonthButtonText: {
+    color: "#b91c1c",
+    fontSize: 13,
     fontWeight: "700",
   },
   exportButton: {
@@ -1220,6 +1956,19 @@ const styles = StyleSheet.create({
   },
   exportButtonText: {
     color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  secondaryHeaderButton: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.28)",
+  },
+  secondaryHeaderButtonText: {
+    color: "#334155",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1292,32 +2041,104 @@ const styles = StyleSheet.create({
   },
   periodPromptContent: {
     width: "100%",
-    maxWidth: 760,
-    borderRadius: 24,
+    maxWidth: 380,
+    borderRadius: 20,
     backgroundColor: "#f8fafc",
-    padding: 24,
+    padding: 20,
     gap: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.7)",
   },
   periodPromptTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "800",
     color: "#0f172a",
   },
   periodPromptText: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748b",
   },
-  periodInput: {
+  periodQuickOption: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.3)",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  periodQuickOptionActive: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  periodQuickOptionLabel: {
+    fontSize: 15,
+    fontWeight: "800",
     color: "#0f172a",
+  },
+  periodQuickOptionLabelActive: {
+    color: "#f8fafc",
+  },
+  periodQuickOptionHint: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  periodQuickOptionHintActive: {
+    color: "rgba(248,250,252,0.78)",
+  },
+  periodYearRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  periodYearChip: {
+    minWidth: 76,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.24)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  periodYearChipActive: {
+    backgroundColor: "#dbeafe",
+    borderColor: "#60a5fa",
+  },
+  periodYearChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  periodYearChipTextActive: {
+    color: "#1d4ed8",
+  },
+  periodMonthGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  periodMonthChip: {
+    width: "22%",
+    minWidth: 64,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.24)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  periodMonthChipActive: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  periodMonthChipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#334155",
+  },
+  periodMonthChipTextActive: {
+    color: "#f8fafc",
   },
   periodPromptActions: {
     flexDirection: "row",
@@ -1327,13 +2148,60 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 11,
+    backgroundColor: "#e2e8f0",
   },
-  periodPromptApplyButton: {
-    backgroundColor: "#0f172a",
-  },
-  periodPromptApplyText: {
+  periodPromptButtonText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#f8fafc",
+    color: "#0f172a",
+  },
+  deleteMonthPromptContent: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 20,
+    backgroundColor: "#f8fafc",
+    padding: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+  },
+  deleteMonthPromptTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  deleteMonthPromptText: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  deleteMonthOptionButton: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.24)",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  deleteMonthOptionDanger: {
+    borderColor: "rgba(220, 38, 38, 0.24)",
+    backgroundColor: "#fff7f7",
+  },
+  deleteMonthOptionInfo: {
+    borderColor: "rgba(59, 130, 246, 0.2)",
+    backgroundColor: "#f8fbff",
+  },
+  deleteMonthOptionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  deleteMonthOptionText: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  deleteMonthPromptActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
 });

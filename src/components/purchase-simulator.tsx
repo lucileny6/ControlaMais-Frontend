@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
 import { toast } from '@/hooks/use-toast';
 import { useDashboard } from '@/hooks/useDashboard';
@@ -16,6 +17,7 @@ type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export function PurchaseSimulator() {
   const { saldo, loading: isDashboardLoading } = useDashboard();
+  const { width } = useWindowDimensions();
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseDescription, setPurchaseDescription] = useState('');
   const [installments, setInstallments] = useState('1');
@@ -26,6 +28,7 @@ export function PurchaseSimulator() {
   const parsedPurchaseAmount = useMemo(() => parseCurrencyInput(purchaseAmount), [purchaseAmount]);
   const parsedInstallments = useMemo(() => parseMonthsInput(installments), [installments]);
   const newBalance = parsedPurchaseAmount > 0 ? saldo - parsedPurchaseAmount : saldo;
+  const chartWidth = Math.max(280, Math.min(width - 96, 720));
   const canSimulate =
     parsedPurchaseAmount > 0 &&
     parsedInstallments > 0 &&
@@ -199,7 +202,7 @@ export function PurchaseSimulator() {
                   </Text>
                 </TouchableOpacity>
 
-                {showResultDetails ? renderWorkflowSimulationDetails(result) : null}
+                {showResultDetails ? renderWorkflowSimulationDetails(result, chartWidth) : null}
               </>
             )}
           </View>
@@ -217,51 +220,59 @@ function parseCurrencyInput(value: string) {
 
 async function buildProjectionPayload(months: number) {
   const transactionsResponse = await apiService.getTransactions().catch(() => []);
-  const recurringTransactions = (transactionsResponse ?? [])
-    .map((transaction: any, index: number) =>
-      normalizeFinancialTransaction(
-        {
-          id: transaction?.id ?? transaction?._id ?? transaction?.transactionId ?? index,
-          descricao: transaction?.descricao ?? transaction?.description,
-          valor: transaction?.valor ?? transaction?.amount ?? transaction?.value,
-          tipo: transaction?.tipo ?? transaction?.type,
-          recorrente:
-            transaction?.recorrente ??
-            transaction?.recurring ??
-            transaction?.isRecurring ??
-            transaction?.recorrencia,
-          data: transaction?.data ?? transaction?.date,
-          date: transaction?.date ?? transaction?.data,
-        },
-        index,
-      ),
+
+  const transactions = (transactionsResponse ?? []).map((transaction: any, index: number) =>
+    normalizeFinancialTransaction(
+      {
+        id: transaction?.id ?? transaction?._id ?? index,
+        descricao: transaction?.descricao ?? transaction?.description,
+        valor: transaction?.valor ?? transaction?.amount ?? transaction?.value ?? 0,
+        tipo: transaction?.tipo ?? transaction?.type,
+        data: transaction?.data ?? transaction?.date,
+        date: transaction?.date ?? transaction?.data,
+      },
+      index,
     )
-    .filter((transaction) => transaction.recorrente);
+  );
+  // 🔥 COLOCA AQUI
+console.log("TODAS TRANSAÇÕES:", transactions);
 
-  const firstMonth = startOfMonth(addMonths(new Date(), 1));
+transactions.forEach(t => {
+  if (t.tipo === "despesa") {
+    console.log("DESPESA:", t.descricao, t.valor, t.date || t.data);
+  }
+});
 
-  return Array.from({ length: months }, (_, index) => {
-    const monthDate = addMonths(firstMonth, index);
-    const monthTransactions = recurringTransactions.filter((transaction) => {
-      const transactionDate = getTransactionMonth(transaction);
-      return transactionDate ? isSameMonth(transactionDate, monthDate) : false;
-    });
+  //  pega data atual
+  const hoje = new Date();
 
-    const receitas = monthTransactions
-      .filter((transaction) => transaction.tipo === 'receita')
-      .reduce((total, transaction) => total + transaction.valor, 0);
-    const despesas = monthTransactions
-      .filter((transaction) => transaction.tipo === 'despesa')
-      .reduce((total, transaction) => total + transaction.valor, 0);
+  //  função para verificar se é do mês atual
+  const isMesmoMes = (data: any) => {
+    const d = new Date(data);
+    return (
+      d.getMonth() === hoje.getMonth() &&
+      d.getFullYear() === hoje.getFullYear()
+    );
+  };
 
-    return {
-      mes: index + 1,
-      referencia: formatMonthReference(monthDate),
-      receitas: roundCurrency(receitas),
-      despesas: roundCurrency(despesas),
-      saldo_base: roundCurrency(receitas - despesas),
-    };
-  });
+  // RECEITAS DO MÊS ATUAL
+  const receitasMes = transactions
+    .filter((t) => t.tipo === "receita" && t.recorrente === true)
+    .reduce((total, t) => total + Number(t.valor || 0), 0);
+
+  //  DESPESAS DO MÊS ATUAL
+  const despesasMes = transactions
+    .filter((t) => t.tipo === "despesa" && t.recorrente === true)
+    .reduce((total, t) => total + Number(t.valor || 0), 0);
+
+  //  MONTA A PROJEÇÃO (repete o mês atual para os próximos)
+  return Array.from({ length: months }, (_, index) => ({
+    mes: index + 1,
+    referencia: `Mes ${index + 1}`,
+    receitas: roundCurrency(receitasMes),
+    despesas: roundCurrency(despesasMes),
+    saldo_base: roundCurrency(receitasMes - despesasMes),
+  }));
 }
 
 function parseMonthsInput(value: string) {
@@ -400,7 +411,14 @@ function hasWorkflowSimulation(value: JsonValue) {
   return Array.isArray(simulation) && simulation.length > 0;
 }
 
-function renderWorkflowSimulationDetails(value: JsonValue): React.ReactNode {
+type SimulationPoint = {
+  label: string;
+  saldoBase?: number;
+  parcela?: number;
+  saldoFinal?: number;
+};
+
+function renderWorkflowSimulationDetails(value: JsonValue, chartWidth: number): React.ReactNode {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
@@ -410,9 +428,12 @@ function renderWorkflowSimulationDetails(value: JsonValue): React.ReactNode {
     return null;
   }
 
+  const series = extractSimulationSeries(simulation);
+
   return (
     <View style={styles.detailsContainer}>
       <Text style={styles.detailsTitle}>Detalhes do calculo</Text>
+      {series.length > 1 ? <SimulationLineChart data={series} width={chartWidth} /> : null}
       {simulation.map((item, index) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
           return null;
@@ -446,6 +467,193 @@ function renderWorkflowSimulationDetails(value: JsonValue): React.ReactNode {
   );
 }
 
+function extractSimulationSeries(simulation: JsonValue[]) {
+  return simulation
+    .map((item, index): SimulationPoint | null => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null;
+      }
+
+      const record = item as Record<string, JsonValue>;
+      const label = String(record.referencia ?? record.mes ?? `M${index + 1}`).trim() || `M${index + 1}`;
+      const saldoBase = parseNumberLike(record.saldo_base);
+      const parcela = parseNumberLike(record.parcela);
+      const saldoFinal = parseNumberLike(record.saldo_final);
+
+      if (saldoBase === undefined && parcela === undefined && saldoFinal === undefined) {
+        return null;
+      }
+
+      return {
+        label,
+        ...(saldoBase !== undefined ? { saldoBase } : {}),
+        ...(parcela !== undefined ? { parcela } : {}),
+        ...(saldoFinal !== undefined ? { saldoFinal } : {}),
+      };
+    })
+    .filter((item): item is SimulationPoint => item !== null);
+}
+
+function parseNumberLike(value: JsonValue | undefined) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const cleaned = value.trim().replace(/[^\d,.-]/g, '');
+  if (!cleaned) return undefined;
+
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    const normalized =
+      lastComma > lastDot
+        ? cleaned.replace(/\./g, '').replace(',', '.')
+        : cleaned.replace(/,/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  if (hasComma) {
+    const parsed = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: number }) {
+  const chartHeight = 220;
+  const paddingTop = 24;
+  const paddingRight = 20;
+  const paddingBottom = 40;
+  const paddingLeft = 44;
+  const plotWidth = Math.max(width - paddingLeft - paddingRight, 120);
+  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 100);
+
+  const values = data.flatMap((point) =>
+    [point.saldoBase, point.parcela, point.saldoFinal].filter((value): value is number => value !== undefined),
+  );
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const span = maxValue - minValue || 1;
+  const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+
+  const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
+  const getX = (index: number) => paddingLeft + stepX * index;
+
+  const series = [
+    { key: 'saldoBase', label: 'Saldo base', color: '#1d4ed8' },
+    { key: 'parcela', label: 'Parcela', color: '#ea580c' },
+    { key: 'saldoFinal', label: 'Saldo final', color: '#16a34a' },
+  ] as const;
+
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.chartTitle}>Evolucao da simulacao</Text>
+      <Text style={styles.chartSubtitle}>Comparativo por mes entre saldo base, parcela e saldo final.</Text>
+
+      <Svg width={width} height={chartHeight}>
+        {[0, 0.5, 1].map((ratio) => {
+          const y = paddingTop + plotHeight * ratio;
+          const value = maxValue - span * ratio;
+          return (
+            <React.Fragment key={`grid-${ratio}`}>
+              <Line
+                x1={paddingLeft}
+                y1={y}
+                x2={paddingLeft + plotWidth}
+                y2={y}
+                stroke="#dbe5ec"
+                strokeWidth="1"
+              />
+              <SvgText x={paddingLeft - 8} y={y + 4} fontSize="11" fill="#6b7a90" textAnchor="end">
+                {formatCompactCurrency(value)}
+              </SvgText>
+            </React.Fragment>
+          );
+        })}
+
+        {data.map((point, index) => (
+          <SvgText
+            key={`label-${point.label}-${index}`}
+            x={getX(index)}
+            y={chartHeight - 12}
+            fontSize="11"
+            fill="#6b7a90"
+            textAnchor="middle"
+          >
+            {point.label}
+          </SvgText>
+        ))}
+
+        {series.map((serie) => {
+          const points = data
+            .map((point, index) => {
+              const value = point[serie.key];
+              if (value === undefined) return null;
+              return `${getX(index)},${getY(value)}`;
+            })
+            .filter((item): item is string => Boolean(item));
+
+          if (points.length < 2) {
+            return null;
+          }
+
+          return (
+            <React.Fragment key={serie.key}>
+              <Polyline
+                points={points.join(' ')}
+                fill="none"
+                stroke={serie.color}
+                strokeWidth="3"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {data.map((point, index) => {
+                const value = point[serie.key];
+                if (value === undefined) return null;
+                return (
+                  <Circle
+                    key={`${serie.key}-${point.label}-${index}`}
+                    cx={getX(index)}
+                    cy={getY(value)}
+                    r="4"
+                    fill={serie.color}
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                  />
+                );
+              })}
+            </React.Fragment>
+          );
+        })}
+      </Svg>
+
+      <View style={styles.chartLegend}>
+        {series.map((serie) => (
+          <View key={serie.key} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: serie.color }]} />
+            <Text style={styles.legendText}>{serie.label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function formatPrimitive(value: JsonPrimitive) {
   if (value === null) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -459,6 +667,11 @@ function formatJsonKey(key: string) {
 
 function roundCurrency(value: number) {
   return Number(value.toFixed(2));
+}
+
+function formatCompactCurrency(value: number) {
+  const rounded = Math.round(value);
+  return `R$ ${rounded.toLocaleString('pt-BR')}`;
 }
 
 function getTransactionMonth(transaction: ReturnType<typeof normalizeFinancialTransaction>) {
@@ -677,6 +890,45 @@ const styles = StyleSheet.create({
   },
   detailsContainer: {
     gap: 10,
+  },
+  chartCard: {
+    gap: 8,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#f8fbfd',
+    borderWidth: 1,
+    borderColor: '#dde7ee',
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#10233f',
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#5f7086',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 4,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#506174',
+    fontWeight: '600',
   },
   detailsTitle: {
     fontSize: 14,
