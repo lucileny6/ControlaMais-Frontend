@@ -1,149 +1,333 @@
-﻿import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Svg, { G, Line, Rect, Text as SvgText } from 'react-native-svg';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { CumulativeFinanceChartPoint } from "@/lib/financial-chart";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 
-export interface MonthlyChartPoint {
-  month: string;
-  receitas: number;
-  despesas: number;
-}
+export type { CumulativeFinanceChartPoint } from "@/lib/financial-chart";
 
-const fallbackMonthlyData: MonthlyChartPoint[] = [
-  { month: 'Jan', receitas: 3200, despesas: 2100 },
-  { month: 'Fev', receitas: 3500, despesas: 2300 },
-  { month: 'Mar', receitas: 3200, despesas: 1900 },
-  { month: 'Abr', receitas: 3800, despesas: 2500 },
-  { month: 'Mai', receitas: 3200, despesas: 2200 },
-  { month: 'Jun', receitas: 3600, despesas: 2400 },
+type ChartSeriesKey = keyof Pick<
+  CumulativeFinanceChartPoint,
+  "income" | "expense" | "investment" | "balance"
+>;
+
+type ChartSeries = {
+  key: ChartSeriesKey;
+  label: string;
+  color: string;
+  strokeWidth: number;
+};
+
+const CHART_SERIES: ChartSeries[] = [
+  { key: "income", label: "Receita", color: "#16a34a", strokeWidth: 2 },
+  { key: "expense", label: "Despesa", color: "#dc2626", strokeWidth: 2 },
+  { key: "investment", label: "Investimento", color: "#60a5fa", strokeWidth: 2 },
+  { key: "balance", label: "Saldo", color: "#1e293b", strokeWidth: 3 },
 ];
+
+const formatCurrency = (amount: number) =>
+  Number(amount || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+const formatCompactCurrency = (amount: number) =>
+  Number(amount || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
+
+const buildSmoothPath = (points: { x: number; y: number }[]) => {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const controlX = (current.x + next.x) / 2;
+    const controlY = (current.y + next.y) / 2;
+    path += ` Q ${current.x} ${current.y} ${controlX} ${controlY}`;
+  }
+
+  const penultimate = points[points.length - 2];
+  const last = points[points.length - 1];
+  path += ` Q ${penultimate.x} ${penultimate.y} ${last.x} ${last.y}`;
+
+  return path;
+};
+
+const formatAxisLabel = (dateKey: string) => {
+  const [, , day] = dateKey.split("-");
+  return day ?? dateKey;
+};
+
+const formatTooltipLabel = (dateKey: string) => {
+  const [year, month, day] = dateKey.split("-");
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  return parsed.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+export function CumulativeFinanceLineChart({
+  data,
+  width,
+}: {
+  data: CumulativeFinanceChartPoint[];
+  width: number;
+}) {
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, data.length - 1));
+  const chartHeight = 320;
+  const paddingTop = 28;
+  const paddingRight = 26;
+  const paddingBottom = 52;
+  const paddingLeft = 56;
+  const plotWidth = Math.max(width - paddingLeft - paddingRight, 180);
+  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 160);
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, data.length - 1));
+  const activePoint = data[safeActiveIndex];
+
+  const values = data.flatMap((item) => [item.income, item.expense, item.investment, item.balance]);
+  const minValue = Math.min(...values, 0);
+  const maxValue = Math.max(...values, 0);
+  const span = maxValue - minValue || 1;
+  const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+
+  const getX = (index: number) => paddingLeft + stepX * index;
+  const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
+
+  const tooltipWidth = 188;
+  const tooltipHeight = 104;
+  const activeX = getX(safeActiveIndex);
+  const tooltipX = Math.min(
+    Math.max(activeX - tooltipWidth / 2, paddingLeft),
+    paddingLeft + plotWidth - tooltipWidth,
+  );
+  const tooltipY = paddingTop - 6;
+  const interactiveZoneTop = paddingTop;
+  const interactiveZoneHeight = plotHeight;
+  const interactiveZoneWidth = data.length > 1 ? stepX : plotWidth;
+
+  return (
+    <View style={styles.lineChartCard}>
+      <View style={[styles.lineChartFrame, { width, height: chartHeight }]}>
+        <Svg width={width} height={chartHeight}>
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = paddingTop + plotHeight * ratio;
+            const value = maxValue - span * ratio;
+            return (
+              <React.Fragment key={`grid-${ratio}`}>
+                <Line
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={paddingLeft + plotWidth}
+                  y2={y}
+                  stroke="#dbe5ec"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                />
+                <SvgText x={paddingLeft - 8} y={y + 4} fontSize="11" fill="#718198" textAnchor="end">
+                  {formatCompactCurrency(value)}
+                </SvgText>
+              </React.Fragment>
+            );
+          })}
+
+          {data.map((point, index) => (
+            <SvgText
+              key={`x-label-${point.date}-${index}`}
+              x={getX(index)}
+              y={chartHeight - 14}
+              fontSize="11"
+              fill="#718198"
+              textAnchor="middle"
+            >
+              {formatAxisLabel(point.date)}
+            </SvgText>
+          ))}
+
+          {CHART_SERIES.map((series) => {
+            const points = data.map((point, index) => ({
+              x: getX(index),
+              y: getY(point[series.key]),
+            }));
+
+            return (
+              <React.Fragment key={series.key}>
+                <Path
+                  d={buildSmoothPath(points)}
+                  fill="none"
+                  stroke={series.color}
+                  strokeWidth={series.strokeWidth}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {points.map((point, index) => (
+                  <Circle
+                    key={`${series.key}-${index}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={series.key === "balance" ? "4.5" : "3.5"}
+                    fill={series.color}
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                  />
+                ))}
+              </React.Fragment>
+            );
+          })}
+
+          {activePoint ? (
+            <>
+              <Line
+                x1={activeX}
+                y1={paddingTop}
+                x2={activeX}
+                y2={paddingTop + plotHeight}
+                stroke="#94a3b8"
+                strokeWidth="1.5"
+                strokeDasharray="4 4"
+              />
+              <Rect
+                x={tooltipX}
+                y={tooltipY}
+                rx={14}
+                ry={14}
+                width={tooltipWidth}
+                height={tooltipHeight}
+                fill="#0f172a"
+                fillOpacity="0.94"
+              />
+              <SvgText x={tooltipX + 14} y={tooltipY + 22} fontSize="12" fill="#f8fafc" fontWeight="700">
+                {formatTooltipLabel(activePoint.date)}
+              </SvgText>
+              <SvgText x={tooltipX + 14} y={tooltipY + 42} fontSize="11" fill="#86efac">
+                {`Receita: ${formatCurrency(activePoint.income)}`}
+              </SvgText>
+              <SvgText x={tooltipX + 14} y={tooltipY + 58} fontSize="11" fill="#fca5a5">
+                {`Despesa: ${formatCurrency(activePoint.expense)}`}
+              </SvgText>
+              <SvgText x={tooltipX + 14} y={tooltipY + 74} fontSize="11" fill="#93c5fd">
+                {`Investimento: ${formatCurrency(activePoint.investment)}`}
+              </SvgText>
+              <SvgText x={tooltipX + 14} y={tooltipY + 90} fontSize="11" fill="#cbd5e1">
+                {`Saldo: ${formatCurrency(activePoint.balance)}`}
+              </SvgText>
+            </>
+          ) : null}
+        </Svg>
+
+        <View style={styles.lineChartOverlay} pointerEvents="box-none">
+          {data.map((point, index) => {
+            const left = index === 0 ? paddingLeft : getX(index) - interactiveZoneWidth / 2;
+
+            return (
+              <Pressable
+                key={`hover-zone-${point.date}-${index}`}
+                onHoverIn={() => setActiveIndex(index)}
+                onPressIn={() => setActiveIndex(index)}
+                style={[
+                  styles.lineChartHoverZone,
+                  {
+                    left,
+                    top: interactiveZoneTop,
+                    width: interactiveZoneWidth,
+                    height: interactiveZoneHeight,
+                  },
+                ]}
+              />
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.lineLegend}>
+        {CHART_SERIES.map((series) => (
+          <View key={series.key} style={styles.lineLegendItem}>
+            <View style={[styles.lineLegendDot, { backgroundColor: series.color }]} />
+            <Text style={styles.lineLegendText}>{series.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <Text style={styles.lineChartHint}>
+        Passe o mouse na linha no web ou toque no grafico no mobile para ver os valores do dia.
+      </Text>
+    </View>
+  );
+}
 
 export function IncomeExpenseChart({
   data,
   description,
+  footer,
 }: {
-  data?: MonthlyChartPoint[];
+  data?: CumulativeFinanceChartPoint[];
   description?: string;
+  footer?: React.ReactNode;
 }) {
-  const monthlyData = data && data.length > 0 ? data : fallbackMonthlyData;
+  const chartData = data ?? [];
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
-
-  const chartWidth = Math.min(width - 64, 560);
-  const chartHeight = 260;
-  const maxValue = Math.max(1, ...monthlyData.flatMap(item => [item.receitas, item.despesas]));
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-    });
-  };
-
-  const barWidth = isLargeScreen ? 20 : 16;
-  const spacing = 8;
-  const groupWidth = barWidth * 2 + spacing;
-  const availableWidth = chartWidth - 80;
-  const groupSpacing = availableWidth / Math.max(1, monthlyData.length) - groupWidth;
+  const chartWidth = Math.max(320, Math.min(width - (isLargeScreen ? 180 : 72), 760));
+  const latestPoint = chartData[chartData.length - 1] ?? null;
 
   return (
-    <Card style={styles.card} maxWidth={isLargeScreen ? 600 : 0}>
+    <Card style={styles.card} maxWidth={isLargeScreen ? 820 : 0}>
       <CardHeader>
-        <CardTitle>Receitas vs Despesas</CardTitle>
+        <CardTitle>Evolucao financeira acumulada</CardTitle>
         <CardDescription>
-          {description || "Comparacao mensal de janeiro a junho"}
+          {description || "Receita, despesa, investimento e saldo acumulados por dia."}
         </CardDescription>
       </CardHeader>
 
-      <CardContent>
-        <ScrollView
-          horizontal={!isLargeScreen}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.chartContainer}>
-            <View style={{ width: chartWidth }}>
-              <Svg width={chartWidth} height={chartHeight}>
-                <Line x1={40} y1={20} x2={40} y2={chartHeight - 40} stroke="#e5e5e5" strokeWidth="1" />
-                <Line x1={40} y1={chartHeight - 40} x2={chartWidth - 20} y2={chartHeight - 40} stroke="#e5e5e5" strokeWidth="1" />
+      <CardContent style={styles.cardContent}>
+        {chartData.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Sem movimentacoes no periodo selecionado.</Text>
+          </View>
+        ) : (
+          <>
+            <CumulativeFinanceLineChart data={chartData} width={chartWidth} />
 
-                {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
-                  const y = 20 + (chartHeight - 60) * (1 - ratio);
-                  return (
-                    <Line
-                      key={index}
-                      x1={40}
-                      y1={y}
-                      x2={chartWidth - 20}
-                      y2={y}
-                      stroke="#f5f5f5"
-                      strokeWidth="1"
-                      strokeDasharray="3,3"
-                    />
-                  );
-                })}
-
-                {monthlyData.map((item, index) => {
-                  const x = 60 + (index * (groupWidth + groupSpacing));
-
-                  const receitasHeight = (item.receitas / maxValue) * (chartHeight - 80);
-                  const despesasHeight = (item.despesas / maxValue) * (chartHeight - 80);
-
-                  const receitasY = chartHeight - 40 - receitasHeight;
-                  const despesasY = chartHeight - 40 - despesasHeight;
-
-                  return (
-                    <G key={index}>
-                      <Rect x={x} y={receitasY} width={barWidth} height={receitasHeight} fill="#16a34a" rx={4} />
-
-                      <Rect
-                        x={x + barWidth + spacing}
-                        y={despesasY}
-                        width={barWidth}
-                        height={despesasHeight}
-                        fill="#dc2626"
-                        rx={4}
-                      />
-
-                      <SvgText x={x + groupWidth / 2} y={chartHeight - 20} textAnchor="middle" fontSize="12" fill="#666666">
-                        {item.month}
-                      </SvgText>
-                    </G>
-                  );
-                })}
-              </Svg>
-
-              <View style={styles.legend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: '#16a34a' }]} />
-                  <Text style={styles.legendText}>Receitas</Text>
+            {latestPoint ? (
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>Receita</Text>
+                  <Text style={[styles.summaryValue, { color: "#16a34a" }]}>
+                    {formatCurrency(latestPoint.income)}
+                  </Text>
                 </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: '#dc2626' }]} />
-                  <Text style={styles.legendText}>Despesas</Text>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>Despesa</Text>
+                  <Text style={[styles.summaryValue, { color: "#dc2626" }]}>
+                    {formatCurrency(latestPoint.expense)}
+                  </Text>
+                </View>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>Investimento</Text>
+                  <Text style={[styles.summaryValue, { color: "#60a5fa" }]}>
+                    {formatCurrency(latestPoint.investment)}
+                  </Text>
+                </View>
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>Saldo</Text>
+                  <Text style={[styles.summaryValue, { color: "#1e293b" }]}>
+                    {formatCurrency(latestPoint.balance)}
+                  </Text>
                 </View>
               </View>
-            </View>
+            ) : null}
 
-            <View style={styles.dataTable}>
-              <Text style={styles.dataTableTitle}>Dados Detalhados</Text>
-              {monthlyData.map((item, index) => {
-                const saldo = item.receitas - item.despesas;
-                return (
-                  <View key={index} style={styles.dataRow}>
-                    <Text style={styles.monthText}>{item.month}</Text>
-                    <View style={styles.dataValues}>
-                      <Text style={styles.incomeText}>R$ {formatCurrency(item.receitas)}</Text>
-                      <Text style={styles.expenseText}>R$ {formatCurrency(item.despesas)}</Text>
-                      <Text style={[styles.balanceText, saldo >= 0 ? styles.positiveBalance : styles.negativeBalance]}>
-                        R$ {formatCurrency(saldo)}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </ScrollView>
+            {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -154,86 +338,84 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 430,
   },
-  chartContainer: {
-    padding: 10,
-    alignItems: 'center',
-    minWidth: 300,
-  },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  cardContent: {
     gap: 14,
-    marginTop: 10,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  emptyState: {
+    minHeight: 260,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  lineChartCard: {
+    gap: 14,
+  },
+  lineChartFrame: {
+    alignSelf: "center",
+  },
+  lineChartOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  lineChartHoverZone: {
+    position: "absolute",
+  },
+  lineLegend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 14,
+  },
+  lineLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  lineLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
   },
-  legendText: {
+  lineLegendText: {
     fontSize: 13,
-    color: '#374151',
+    color: "#475569",
+    fontWeight: "600",
   },
-  dataTable: {
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    minWidth: 300,
+  lineChartHint: {
+    fontSize: 12,
+    color: "#718198",
+    textAlign: "center",
   },
-  dataTableTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
   },
-  dataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  monthText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-    minWidth: 40,
-  },
-  dataValues: {
+  summaryCard: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginLeft: 16,
+    minWidth: 150,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(205, 216, 227, 0.8)",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  incomeText: {
-    fontSize: 13,
-    color: '#16a34a',
-    fontWeight: '500',
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#718198",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
-  expenseText: {
-    fontSize: 13,
-    color: '#dc2626',
-    fontWeight: '500',
+  summaryValue: {
+    marginTop: 8,
+    fontSize: 20,
+    fontWeight: "800",
   },
-  balanceText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  positiveBalance: {
-    color: '#16a34a',
-  },
-  negativeBalance: {
-    color: '#dc2626',
+  footerSlot: {
+    marginTop: 4,
   },
 });
-
-
-
-
-

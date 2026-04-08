@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Polygon, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 import { toast } from '@/hooks/use-toast';
 import { useDashboard } from '@/hooks/useDashboard';
 import { apiService } from '@/services/api';
-import { normalizeFinancialTransaction } from '@/services/financialEngine';
+import { calculateMonthlyCashFlow, normalizeFinancialTransaction } from '@/services/financialEngine';
 
 const WEBHOOK_URL =
   process.env.EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL ??
@@ -16,6 +17,7 @@ type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export function PurchaseSimulator() {
+  const router = useRouter();
   const { saldo, loading: isDashboardLoading } = useDashboard();
   const { width } = useWindowDimensions();
   const [purchaseAmount, setPurchaseAmount] = useState('');
@@ -34,6 +36,41 @@ export function PurchaseSimulator() {
     parsedInstallments > 0 &&
     !isLoading &&
     !isDashboardLoading;
+  const recommendationText = useMemo(() => extractWorkflowTextField(result, ['recomendacao', 'mensagem', 'status_final']), [result]);
+  const impactText = useMemo(() => extractWorkflowTextField(result, ['impacto']), [result]);
+  const isHighImpact = useMemo(() => detectHighImpact(result), [result]);
+  const isPurchaseViable = useMemo(() => detectViablePurchase(result), [result]);
+  const plannedInstallmentAmount = useMemo(() => extractWorkflowNumberField(result, ['valor_parcela', 'parcela']), [result]);
+
+  const handleCreateGoal = () => {
+    const amountToUse = parsedPurchaseAmount > 0 ? parsedPurchaseAmount : plannedInstallmentAmount ?? 0;
+
+    router.push({
+      pathname: '/(tabs)/transactions',
+      params: {
+        new: '1',
+        type: 'expense',
+        source: 'goal',
+        category: 'Investimento',
+        description: 'Meta criada após simulação',
+        ...(amountToUse > 0 ? { amount: amountToUse.toFixed(2) } : {}),
+      },
+    } as any);
+  };
+
+  const handleCreatePurchase = () => {
+    const amountToUse = plannedInstallmentAmount ?? parsedPurchaseAmount;
+
+    router.push({
+      pathname: '/(tabs)/transactions',
+      params: {
+        new: '1',
+        type: 'expense',
+        description: 'Compra planejada',
+        ...(amountToUse > 0 ? { amount: amountToUse.toFixed(2) } : {}),
+      },
+    } as any);
+  };
 
   const simulatePurchase = async () => {
     if (parsedPurchaseAmount <= 0) {
@@ -58,7 +95,7 @@ export function PurchaseSimulator() {
       setIsLoading(true);
       setResult(null);
       setShowResultDetails(false);
-      const projecaoMensal = await buildProjectionPayload(parsedInstallments);
+      const projecaoMensal = await buildProjectedCashFlowPayload(parsedInstallments, saldo);
 
       const payload = {
         descricao_compra: purchaseDescription.trim() || 'Compra simulada',
@@ -72,6 +109,7 @@ export function PurchaseSimulator() {
         projecao_mensal: projecaoMensal,
         saldos_mensais: projecaoMensal.map((mes) => mes.saldo_base),
       };
+      console.log('[PurchaseSimulator] webhook payload:', payload);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -83,6 +121,11 @@ export function PurchaseSimulator() {
 
       const responseText = await response.text();
       const parsedResponse = responseText ? safeParseJson(responseText) : null;
+      console.log('[PurchaseSimulator] webhook response:', {
+        status: response.status,
+        ok: response.ok,
+        body: parsedResponse ?? responseText,
+      });
 
       if (!response.ok) {
         throw new Error(extractErrorMessage(parsedResponse, response.status));
@@ -191,6 +234,26 @@ export function PurchaseSimulator() {
               {renderWorkflowResult(result)}
             </View>
 
+            {recommendationText ? (
+              <View style={styles.recommendationContainer}>
+                <Text style={styles.recommendationLabel}>Recomendação</Text>
+                <Text style={styles.recommendationValue}>{recommendationText}</Text>
+                {impactText ? <Text style={styles.recommendationHint}>{`Impacto: ${impactText}`}</Text> : null}
+
+                <View style={styles.actionButtonsRow}>
+                  <TouchableOpacity style={styles.secondaryActionButton} onPress={handleCreateGoal}>
+                    <Text style={styles.secondaryActionButtonText}>🎯 Criar Meta</Text>
+                  </TouchableOpacity>
+
+                  {isPurchaseViable && !isHighImpact ? (
+                    <TouchableOpacity style={styles.primaryActionButton} onPress={handleCreatePurchase}>
+                      <Text style={styles.primaryActionButtonText}>Comprar</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
             {hasWorkflowSimulation(result) && (
               <>
                 <TouchableOpacity
@@ -218,6 +281,8 @@ function parseCurrencyInput(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Legacy helper kept temporarily while the simulator migrates to the current-month payload.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function buildProjectionPayload(months: number) {
   const transactionsResponse = await apiService.getTransactions().catch(() => []);
 
@@ -279,6 +344,108 @@ function parseMonthsInput(value: string) {
   const normalized = value.replace(/\D/g, '');
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function buildProjectedCashFlowPayload(months: number, saldoAtual: number) {
+  const transactionsResponse = await apiService.getTransactions().catch(() => []);
+  const nextMonthReference = new Date();
+  nextMonthReference.setDate(1);
+  nextMonthReference.setMonth(nextMonthReference.getMonth() + 1);
+
+  const fluxoMensal = calculateMonthlyCashFlow((transactionsResponse ?? []) as any[], {
+    saldoInicial: saldoAtual,
+    mesesProjetados: months,
+    dataReferencia: nextMonthReference,
+  });
+
+  console.log(
+    '[PurchaseSimulator] projected monthly cash flow:',
+    fluxoMensal.map((mes, index) => ({
+      mes: index + 1,
+      referencia: mes.label,
+      receitas: mes.receitas,
+      despesas: mes.despesas,
+      saldoLiquido: mes.saldoLiquido,
+      saldoProjetado: mes.saldoProjetado,
+      transacoes: mes.transacoes.map((transaction) => ({
+        descricao: transaction.descricao,
+        tipo: transaction.tipo,
+        valor: transaction.valor,
+        data: transaction.date ?? transaction.data,
+        recorrente: transaction.recorrente,
+      })),
+    })),
+  );
+
+  return fluxoMensal.map((mes, index) => ({
+    mes: index + 1,
+    referencia: mes.label,
+    receitas: roundCurrency(mes.receitas),
+    despesas: roundCurrency(mes.despesas),
+    saldo_base: roundCurrency(mes.saldoLiquido),
+    saldo_final: roundCurrency(mes.saldoProjetado),
+  }));
+}
+
+async function buildProjectionPayloadCurrentMonth(months: number) {
+  const transactionsResponse = await apiService.getTransactions().catch(() => []);
+
+  const transactions = (transactionsResponse ?? []).map((transaction: any, index: number) =>
+    normalizeFinancialTransaction(
+      {
+        id: transaction?.id ?? transaction?._id ?? index,
+        descricao: transaction?.descricao ?? transaction?.description,
+        valor: transaction?.valor ?? transaction?.amount ?? transaction?.value ?? 0,
+        tipo: transaction?.tipo ?? transaction?.type,
+        data: transaction?.data ?? transaction?.date,
+        date: transaction?.date ?? transaction?.data,
+      },
+      index,
+    ),
+  );
+
+  const hoje = new Date();
+
+  const isMesmoMes = (data: unknown) => {
+    const parsedDate = new Date(String(data ?? ''));
+    if (Number.isNaN(parsedDate.getTime())) {
+      return false;
+    }
+
+    return parsedDate.getMonth() === hoje.getMonth() && parsedDate.getFullYear() === hoje.getFullYear();
+  };
+
+  const recurringTransactions = transactions.filter(
+    (transaction) => transaction.recorrente === true && isMesmoMes(transaction.date ?? transaction.data),
+  );
+
+  const receitasMes = recurringTransactions
+    .filter((transaction) => transaction.tipo === 'receita')
+    .reduce((total, transaction) => total + Number(transaction.valor || 0), 0);
+
+  const despesasMes = recurringTransactions
+    .filter((transaction) => transaction.tipo === 'despesa')
+    .reduce((total, transaction) => total + Number(transaction.valor || 0), 0);
+
+  console.log('[PurchaseSimulator] recurring month base:', {
+    referenceMonth: `${String(hoje.getMonth() + 1).padStart(2, '0')}-${hoje.getFullYear()}`,
+    receitasMes,
+    despesasMes,
+    recurringTransactions: recurringTransactions.map((transaction) => ({
+      descricao: transaction.descricao,
+      tipo: transaction.tipo,
+      valor: transaction.valor,
+      data: transaction.date ?? transaction.data,
+    })),
+  });
+
+  return Array.from({ length: months }, (_, index) => ({
+    mes: index + 1,
+    referencia: `Mes ${index + 1}`,
+    receitas: roundCurrency(receitasMes),
+    despesas: roundCurrency(despesasMes),
+    saldo_base: roundCurrency(receitasMes - despesasMes),
+  }));
 }
 
 function safeParseJson(value: string): JsonValue {
@@ -399,6 +566,74 @@ function renderWorkflowResult(value: JsonValue): React.ReactNode {
         </View>
       ))}
     </View>
+  );
+}
+
+function extractWorkflowTextField(value: JsonValue | null, keys: string[]) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return '';
+  }
+
+  const record = value as Record<string, JsonValue>;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return '';
+}
+
+function extractWorkflowNumberField(value: JsonValue | null, keys: string[]) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, JsonValue>;
+  for (const key of keys) {
+    const parsed = parseNumberLike(record[key]);
+    if (parsed !== undefined) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function detectHighImpact(value: JsonValue | null) {
+  const impact = extractWorkflowTextField(value, ['impacto', 'recomendacao', 'mensagem', 'status_final'])
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return impact.includes('impacto alto') || impact.includes('alto impacto') || impact.includes('impacto: alto') || impact === 'alto';
+}
+
+function detectViablePurchase(value: JsonValue | null) {
+  const content = [
+    extractWorkflowTextField(value, ['recomendacao']),
+    extractWorkflowTextField(value, ['mensagem']),
+    extractWorkflowTextField(value, ['status_final']),
+  ]
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  if (!content.trim()) {
+    return false;
+  }
+
+  if (content.includes('nao e viavel') || content.includes('nao viavel') || content.includes('inviavel')) {
+    return false;
+  }
+
+  return (
+    content.includes('compra e viavel') ||
+    content.includes('a compra e viavel') ||
+    content.includes('viavel') ||
+    content.includes('aprovada')
   );
 }
 
@@ -530,13 +765,14 @@ function parseNumberLike(value: JsonValue | undefined) {
 }
 
 function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: number }) {
-  const chartHeight = 220;
-  const paddingTop = 24;
-  const paddingRight = 20;
-  const paddingBottom = 40;
-  const paddingLeft = 44;
-  const plotWidth = Math.max(width - paddingLeft - paddingRight, 120);
-  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 100);
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, data.length - 1));
+  const chartHeight = 280;
+  const paddingTop = 30;
+  const paddingRight = 26;
+  const paddingBottom = 54;
+  const paddingLeft = 54;
+  const plotWidth = Math.max(width - paddingLeft - paddingRight, 140);
+  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 140);
 
   const values = data.flatMap((point) =>
     [point.saldoBase, point.parcela, point.saldoFinal].filter((value): value is number => value !== undefined),
@@ -550,23 +786,46 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
   const maxValue = Math.max(...values);
   const span = maxValue - minValue || 1;
   const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+  const safeActiveIndex = Math.min(activeIndex, data.length - 1);
+  const activePoint = data[safeActiveIndex];
 
   const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
   const getX = (index: number) => paddingLeft + stepX * index;
 
   const series = [
-    { key: 'saldoBase', label: 'Saldo base', color: '#1d4ed8' },
-    { key: 'parcela', label: 'Parcela', color: '#ea580c' },
-    { key: 'saldoFinal', label: 'Saldo final', color: '#16a34a' },
+    { key: 'saldoBase', label: 'Saldo Base', color: '#3b82f6', strokeWidth: 2, opacity: 0.95 },
+    { key: 'parcela', label: 'Parcela', color: '#f97316', strokeWidth: 2, opacity: 0.6, dash: '5 5' },
+    { key: 'saldoFinal', label: 'Saldo Final', color: '#16a34a', strokeWidth: 3, opacity: 1 },
   ] as const;
+
+  const saldoFinalAreaPoints = data
+    .map((point, index) => {
+      if (point.saldoFinal === undefined) return null;
+      return `${getX(index)},${getY(point.saldoFinal)}`;
+    })
+    .filter((item): item is string => Boolean(item));
+
+  const areaBaseY = paddingTop + plotHeight;
+  const saldoFinalArea = saldoFinalAreaPoints.length > 1
+    ? `${paddingLeft},${areaBaseY} ${saldoFinalAreaPoints.join(' ')} ${paddingLeft + plotWidth},${areaBaseY}`
+    : null;
+
+  const activePointX = getX(safeActiveIndex);
+  const tooltipWidth = 168;
+  const tooltipHeight = 88;
+  const tooltipX = Math.min(
+    Math.max(activePointX - tooltipWidth / 2, paddingLeft),
+    paddingLeft + plotWidth - tooltipWidth,
+  );
+  const tooltipY = paddingTop - 10;
 
   return (
     <View style={styles.chartCard}>
       <Text style={styles.chartTitle}>Evolucao da simulacao</Text>
-      <Text style={styles.chartSubtitle}>Comparativo por mes entre saldo base, parcela e saldo final.</Text>
+      <Text style={styles.chartSubtitle}>Comparativo mensal entre saldo base, parcela e saldo final.</Text>
 
       <Svg width={width} height={chartHeight}>
-        {[0, 0.5, 1].map((ratio) => {
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const y = paddingTop + plotHeight * ratio;
           const value = maxValue - span * ratio;
           return (
@@ -576,8 +835,9 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
                 y1={y}
                 x2={paddingLeft + plotWidth}
                 y2={y}
-                stroke="#dbe5ec"
+                stroke="#d8e2eb"
                 strokeWidth="1"
+                strokeDasharray="3 3"
               />
               <SvgText x={paddingLeft - 8} y={y + 4} fontSize="11" fill="#6b7a90" textAnchor="end">
                 {formatCompactCurrency(value)}
@@ -585,6 +845,26 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
             </React.Fragment>
           );
         })}
+
+        {data.map((point, index) => (
+          <Line
+            key={`vertical-${point.label}-${index}`}
+            x1={getX(index)}
+            y1={paddingTop}
+            x2={getX(index)}
+            y2={paddingTop + plotHeight}
+            stroke="#eef3f7"
+            strokeWidth="1"
+          />
+        ))}
+
+        {saldoFinalArea ? (
+          <Polygon
+            points={saldoFinalArea}
+            fill="#16a34a"
+            fillOpacity="0.12"
+          />
+        ) : null}
 
         {data.map((point, index) => (
           <SvgText
@@ -618,9 +898,11 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
                 points={points.join(' ')}
                 fill="none"
                 stroke={serie.color}
-                strokeWidth="3"
+                strokeWidth={String(serie.strokeWidth)}
                 strokeLinejoin="round"
                 strokeLinecap="round"
+                opacity={serie.opacity}
+                strokeDasharray={serie.dash}
               />
               {data.map((point, index) => {
                 const value = point[serie.key];
@@ -630,16 +912,65 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
                     key={`${serie.key}-${point.label}-${index}`}
                     cx={getX(index)}
                     cy={getY(value)}
-                    r="4"
+                    r={serie.key === 'saldoFinal' ? '4.5' : '3.5'}
                     fill={serie.color}
                     stroke="#ffffff"
                     strokeWidth="2"
+                    opacity={serie.opacity}
                   />
                 );
               })}
             </React.Fragment>
           );
         })}
+
+        {activePoint ? (
+          <>
+            <Line
+              x1={activePointX}
+              y1={paddingTop}
+              x2={activePointX}
+              y2={paddingTop + plotHeight}
+              stroke="#94a3b8"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+            <Rect
+              x={tooltipX}
+              y={tooltipY}
+              rx={14}
+              ry={14}
+              width={tooltipWidth}
+              height={tooltipHeight}
+              fill="#0f172a"
+              fillOpacity="0.92"
+            />
+            <SvgText x={tooltipX + 14} y={tooltipY + 22} fontSize="12" fill="#f8fafc" fontWeight="700">
+              {`Mês ${safeActiveIndex + 1}`}
+            </SvgText>
+            <SvgText x={tooltipX + 14} y={tooltipY + 42} fontSize="11" fill="#bfdbfe">
+              {`Saldo Base: ${formatCurrencyBRL(activePoint.saldoBase ?? 0)}`}
+            </SvgText>
+            <SvgText x={tooltipX + 14} y={tooltipY + 58} fontSize="11" fill="#fdba74">
+              {`Parcela: ${formatCurrencyBRL(activePoint.parcela ?? 0)}`}
+            </SvgText>
+            <SvgText x={tooltipX + 14} y={tooltipY + 74} fontSize="11" fill="#86efac">
+              {`Saldo Final: ${formatCurrencyBRL(activePoint.saldoFinal ?? 0)}`}
+            </SvgText>
+          </>
+        ) : null}
+
+        {data.map((point, index) => (
+          <Circle
+            key={`hit-area-${point.label}-${index}`}
+            cx={getX(index)}
+            cy={paddingTop + plotHeight / 2}
+            r="18"
+            fill="#ffffff"
+            fillOpacity="0.01"
+            onPress={() => setActiveIndex(index)}
+          />
+        ))}
       </Svg>
 
       <View style={styles.chartLegend}>
@@ -650,6 +981,8 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
           </View>
         ))}
       </View>
+
+      <Text style={styles.chartHint}>Clique em um mês no gráfico para ver os valores detalhados.</Text>
     </View>
   );
 }
@@ -672,6 +1005,13 @@ function roundCurrency(value: number) {
 function formatCompactCurrency(value: number) {
   const rounded = Math.round(value);
   return `R$ ${rounded.toLocaleString('pt-BR')}`;
+}
+
+function formatCurrencyBRL(value: number) {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
 }
 
 function getTransactionMonth(transaction: ReturnType<typeof normalizeFinancialTransaction>) {
@@ -835,6 +1175,71 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dde7ee',
   },
+  recommendationContainer: {
+    gap: 10,
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7e2ea',
+  },
+  recommendationLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7a90',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  recommendationValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#10233f',
+    lineHeight: 22,
+  },
+  recommendationHint: {
+    fontSize: 13,
+    color: '#5f7086',
+    lineHeight: 19,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 2,
+  },
+  secondaryActionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#c8d6e2',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  primaryActionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: '#10233f',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10233f',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  primaryActionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
   jsonSection: {
     gap: 8,
   },
@@ -929,6 +1334,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#506174',
     fontWeight: '600',
+  },
+  chartHint: {
+    fontSize: 12,
+    color: '#6b7a90',
+    lineHeight: 18,
   },
   detailsTitle: {
     fontSize: 14,

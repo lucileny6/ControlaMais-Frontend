@@ -19,11 +19,6 @@ export function DashboardNav() {
       icon: Wallet,
     },
     {
-      title: "Relatórios",
-      href: "/(tabs)/reports",
-      icon: BarChart3,
-    },
-    {
       title: "Graficos",
       href: "/(tabs)/graphs",
       icon: BarChart3,

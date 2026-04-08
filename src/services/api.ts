@@ -55,8 +55,8 @@ export interface UpdateTransactionDTO {
   observacao?: string;
   recorrente?: boolean;
   recurring?: boolean;
-  type?: "income" | "expense";
-  tipo?: "income" | "expense" | "receita" | "despesa";
+  type?: "income" | "expense" | "ia";
+  tipo?: "income" | "expense" | "ia" | "receita" | "despesa";
 }
 
 // ===== DASHBOARD =====
@@ -116,6 +116,53 @@ export class ApiService {
   private typeSafeRequestOptions(options: RequestInit & { preserveSessionOnAuthError?: boolean }) {
     const { preserveSessionOnAuthError, ...requestOptions } = options;
     return { preserveSessionOnAuthError: Boolean(preserveSessionOnAuthError), requestOptions };
+  }
+
+  private buildTransactionEndpoints(
+    id: string,
+    transactionType?: "income" | "expense" | "ia",
+  ) {
+    const genericEndpoint = transactionType ? `/transacoes/${id}/${transactionType}` : undefined;
+    const legacyGenericEndpoint = transactionType ? `/transaction/${id}/${transactionType}` : undefined;
+    const preferredEndpoint =
+      transactionType === "income"
+        ? `/receitas/${id}`
+        : transactionType === "expense"
+          ? `/despesas/${id}`
+          : transactionType === "ia"
+            ? `/acoes-financeiras/${id}`
+            : undefined;
+
+    return Array.from(
+      new Set(
+        [
+          genericEndpoint,
+          preferredEndpoint,
+          `/receitas/${id}`,
+          `/despesas/${id}`,
+          `/acoes-financeiras/${id}`,
+          legacyGenericEndpoint,
+        ].filter((endpoint): endpoint is string => Boolean(endpoint)),
+      ),
+    );
+  }
+
+  private shouldTryAnotherTransactionEndpoint(error: unknown) {
+    const message = String((error as any)?.message ?? "").toLowerCase();
+    if (!message) return false;
+
+    if (message.includes("401") || message.includes("403")) {
+      return false;
+    }
+
+    return (
+      message.includes("404") ||
+      message.includes("nao encontrada") ||
+      message.includes("nao encontrado") ||
+      message.includes("não encontrada") ||
+      message.includes("não encontrado") ||
+      message.includes("not found")
+    );
   }
 
   /* ======================
@@ -248,8 +295,16 @@ export class ApiService {
   async updateTransaction(
     id: string,
     dto: UpdateTransactionDTO,
-    transactionType?: "income" | "expense"
+    transactionType?: "income" | "expense" | "ia"
   ) {
+    if (transactionType === "ia" || dto.type === "ia" || dto.tipo === "ia") {
+      console.log("[API] updateTransaction payload:", { endpoint: `/acoes-financeiras/${id}`, dto, transactionType });
+      return this.request(`/acoes-financeiras/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(dto),
+      });
+    }
+
     const isIncome =
       transactionType === "income" ||
       dto.type === "income" ||
@@ -274,22 +329,22 @@ export class ApiService {
     throw lastError ?? new Error("Nao foi possivel atualizar a transacao");
   }
 
-  async deleteTransaction(id: string, transactionType?: "income" | "expense") {
-    const endpoints =
-      transactionType === "income"
-        ? [`/receitas/${id}`]
-        : transactionType === "expense"
-          ? [`/despesas/${id}`]
-          : [`/receitas/${id}`, `/despesas/${id}`];
+  async deleteTransaction(id: string, transactionType?: "income" | "expense" | "ia") {
+    const endpoints = this.buildTransactionEndpoints(id, transactionType);
 
     let lastError: Error | null = null;
-    for (const endpoint of endpoints) {
+    for (let index = 0; index < endpoints.length; index += 1) {
+      const endpoint = endpoints[index];
       try {
         return await this.request(endpoint, {
           method: "DELETE",
         });
       } catch (error: any) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        const canRetryOnAnotherEndpoint = this.shouldTryAnotherTransactionEndpoint(error);
+        if (!canRetryOnAnotherEndpoint || index === endpoints.length - 1) {
+          throw lastError;
+        }
       }
     }
 
@@ -354,6 +409,37 @@ export class ApiService {
       const payload = response?.data ?? response;
       if (Array.isArray(payload)) return payload;
 
+      const annotateGroupedItems = (group: any, transactionType: "income" | "expense" | "ia") => {
+        if (!Array.isArray(group)) return [];
+
+        return group.map((item: any) => {
+          if (!item || typeof item !== "object") {
+            return item;
+          }
+
+          const hasExplicitType =
+            item?.type !== undefined ||
+            item?.tipo !== undefined ||
+            item?.transactionType !== undefined ||
+            item?.natureza !== undefined;
+
+          if (hasExplicitType) {
+            return item;
+          }
+
+          return {
+            ...item,
+            type: transactionType,
+            tipo:
+              transactionType === "income"
+                ? "receita"
+                : transactionType === "expense"
+                  ? "despesa"
+                  : "ia",
+          };
+        });
+      };
+
       const directCandidates = [
         payload?.transacoes,
         payload?.transactions,
@@ -366,14 +452,15 @@ export class ApiService {
 
       // Some backends split transactions by type.
       const groupedCandidates = [
-        payload?.receitas,
-        payload?.despesas,
-        payload?.incomes,
-        payload?.expenses,
+        annotateGroupedItems(payload?.receitas, "income"),
+        annotateGroupedItems(payload?.despesas, "expense"),
+        annotateGroupedItems(payload?.incomes, "income"),
+        annotateGroupedItems(payload?.expenses, "expense"),
+        annotateGroupedItems(payload?.acoesFinanceiras, "ia"),
+        annotateGroupedItems(payload?.acoes, "ia"),
+        annotateGroupedItems(payload?.ias, "ia"),
       ];
-      const mergedGrouped = groupedCandidates.flatMap((group) =>
-        Array.isArray(group) ? group : [],
-      );
+      const mergedGrouped = groupedCandidates.flat();
       if (mergedGrouped.length > 0) return mergedGrouped;
 
       return [];

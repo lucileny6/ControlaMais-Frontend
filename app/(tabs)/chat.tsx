@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiService } from "@/services/api";
 import { chatIAService } from "@/services/chatIA";
+import { useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -36,6 +37,7 @@ interface Message {
   content: string;
   isUser: boolean;
   timestamp: Date;
+  sourceLabel?: string;
 }
 
 interface PendingRegistrationDraft {
@@ -58,6 +60,14 @@ interface User {
 }
 
 const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
+const buildInitialMessages = (name?: string): Message[] => [
+  {
+    id: "1",
+    content: getWelcomeMessage(name),
+    isUser: false,
+    timestamp: new Date(),
+  },
+];
 const getWelcomeMessage = (name?: string) =>
   name
     ? `Olá, ${name}! 👋 Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?`
@@ -164,17 +174,9 @@ export default function ChatPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const displayNameRef = useRef("");
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      content:
-        "Olá! Posso te ajudar a registrar receitas e despesas usando linguagem natural",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
-
+  const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages());
   const [isLoading, setIsLoading] = useState(false);
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
   const [pendingAction, setPendingAction] = useState<AITransactionAction | null>(null);
@@ -231,6 +233,7 @@ export default function ChatPage() {
         persistedDisplayName;
 
       setDisplayName(resolvedDisplayName);
+      displayNameRef.current = resolvedDisplayName;
 
       setMessages((prev) => {
         if (prev.length === 0) return prev;
@@ -247,6 +250,20 @@ export default function ChatPage() {
 
     void loadDisplayName();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        setMessages(buildInitialMessages(displayNameRef.current));
+        setIsLoading(false);
+        setAguardandoConfirmacao(false);
+        setPendingAction(null);
+        setPendingConfirmationData(null);
+        setPendingConfirmationMessage(null);
+        setPendingRegistrationDraft(null);
+      };
+    }, []),
+  );
 
   const addNamePrefix = (message: string) =>
     displayName ? `${displayName}, ${message.charAt(0).toLowerCase()}${message.slice(1)}` : message;
@@ -612,6 +629,26 @@ export default function ChatPage() {
     return null;
   };
 
+  const describeResponseSource = (response: AIResponse) => {
+    switch (response.source) {
+      case "backend-api":
+        return {
+          label: "Backend chat",
+          detail: response.sourceNote ?? "Resposta veio do endpoint /api/chat-ia.",
+        };
+      case "webhook":
+        return {
+          label: "Webhook chat",
+          detail: response.sourceNote ?? "Resposta veio do webhook do chat.",
+        };
+      default:
+        return {
+          label: "Front local",
+          detail: "Resposta montada no app sem chamar o endpoint de chat.",
+        };
+    }
+  };
+
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
 
@@ -628,13 +665,29 @@ export default function ChatPage() {
     try {
       const interpretation = interpretUserMessage(content);
       const localResponse = await buildLocalResponse(interpretation);
-      const response: AIResponse = localResponse ?? (await chatIAService.sendMessage(content));
+      const response: AIResponse =
+        localResponse
+          ? {
+              ...localResponse,
+              source: "front-local",
+              sourceNote: "Resposta montada no app sem chamar o endpoint de chat.",
+            }
+          : (await chatIAService.sendMessage(content));
+      const responseSource = describeResponseSource(response);
+
+      console.log("[Chat] response origin:", {
+        source: response.source ?? "front-local",
+        detail: responseSource.detail,
+        intent: interpretation.intent,
+        hasAction: Boolean(response.acao ?? response.action),
+      });
 
       const iaMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: response.mensagem,
         isUser: false,
         timestamp: new Date(),
+        sourceLabel: responseSource.label,
       };
 
       setMessages((prev) => [...prev, iaMessage]);
@@ -693,20 +746,18 @@ export default function ChatPage() {
 
     setIsLoading(true);
     void createTransactionFromAction(pendingAction)
-     .then((message) => {
-  setMessages((prev) => [
-    ...prev,
-    {
-      id: Date.now().toString(),
-      content: message,
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
-
-  //  solução simples
-  window.location.reload();
-})
+      .then((message) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            content: message,
+            isUser: false,
+            timestamp: new Date(),
+            sourceLabel: "Front local",
+          },
+        ]);
+      })
       .catch((error: any) => {
         setMessages((prev) => [
           ...prev,
@@ -722,6 +773,7 @@ export default function ChatPage() {
         setPendingAction(null);
         setPendingConfirmationData(null);
         setPendingConfirmationMessage(null);
+        setPendingRegistrationDraft(null);
         setIsLoading(false);
       });
   };
@@ -784,6 +836,7 @@ export default function ChatPage() {
                     message={msg.content}
                     isUser={msg.isUser}
                     timestamp={msg.timestamp}
+                    sourceLabel={msg.sourceLabel}
                   />
                 ))}
 

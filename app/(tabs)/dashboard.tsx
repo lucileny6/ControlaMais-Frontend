@@ -151,7 +151,7 @@ const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const
 
 export default function PageDashboard() {
   const router = useRouter();
-  const { saldo, totalReceitas, totalDespesas, transacoesRecentes, loading } = useDashboard();
+  const { saldo, totalReceitas, totalDespesas, totalInvestimentos, transacoesRecentes, loading } = useDashboard();
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -267,6 +267,7 @@ export default function PageDashboard() {
                   saldo={saldo}
                   totalReceitas={totalReceitas}
                   totalDespesas={totalDespesas}
+                  totalInvestimentos={totalInvestimentos}
                   loading={loading}
                 />
 

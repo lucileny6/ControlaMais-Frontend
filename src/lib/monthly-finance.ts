@@ -1,3 +1,4 @@
+import { calculateMonthlyFinancialTotals, isInvestmentTransaction } from "@/lib/investments";
 import { DashboardTransaction, TransactionType } from "@/lib/types";
 
 export type MonthlyFinanceSnapshot = {
@@ -5,6 +6,7 @@ export type MonthlyFinanceSnapshot = {
   transactions: DashboardTransaction[];
   totalIncome: number;
   totalExpenses: number;
+  totalInvestments: number;
   balance: number;
   incomeCount: number;
   expenseCount: number;
@@ -86,16 +88,14 @@ export const buildMonthlyFinanceSnapshot = (
     return parsedDate.getMonth() === month && parsedDate.getFullYear() === year;
   });
 
-  const totalIncome = monthTransactions
-    .filter((transaction) => transaction.type === "income")
-    .reduce((acc, transaction) => acc + transaction.amount, 0);
-  const totalExpenses = monthTransactions
-    .filter((transaction) => transaction.type === "expense")
-    .reduce((acc, transaction) => acc + transaction.amount, 0);
-  const balance = totalIncome - totalExpenses;
+  const totals = calculateMonthlyFinancialTotals(monthTransactions);
+  const totalIncome = totals.totalIncome;
+  const totalExpenses = totals.totalExpense;
+  const totalInvestments = totals.totalInvestment;
+  const balance = totals.balance;
 
   const expenseTotalsByCategory = monthTransactions
-    .filter((transaction) => transaction.type === "expense")
+    .filter((transaction) => transaction.type === "expense" && !isInvestmentTransaction(transaction))
     .reduce((acc, transaction) => {
       const category = transaction.category || "Sem categoria";
       acc.set(category, (acc.get(category) ?? 0) + transaction.amount);
@@ -118,9 +118,12 @@ export const buildMonthlyFinanceSnapshot = (
     transactions: monthTransactions,
     totalIncome,
     totalExpenses,
+    totalInvestments,
     balance,
     incomeCount: monthTransactions.filter((transaction) => transaction.type === "income").length,
-    expenseCount: monthTransactions.filter((transaction) => transaction.type === "expense").length,
+    expenseCount: monthTransactions.filter(
+      (transaction) => transaction.type === "expense" && !isInvestmentTransaction(transaction),
+    ).length,
     topExpenseCategory: topExpenseCategory
       ? { category: topExpenseCategory[0], amount: topExpenseCategory[1] }
       : null,

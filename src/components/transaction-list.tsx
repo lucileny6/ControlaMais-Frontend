@@ -1,7 +1,12 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import {
+  calculateMonthlyFinancialTotals,
+  isInvestmentCategory,
+} from "@/lib/investments";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,11 +19,13 @@ interface Transaction {
   id: string;
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: "income" | "expense" | "ia";
   category: string;
   date: string;
   notes?: string;
   recorrente?: boolean;
+  recurrenceMonths?: number;
+  recurrenceCurrent?: number;
 }
 
 interface TransactionListProps {
@@ -36,6 +43,7 @@ interface TransactionListProps {
     filterType: "all" | "income" | "expense";
     totalIncome: number;
     totalExpense: number;
+    totalInvestment: number;
     balance: number;
   }) => void;
 }
@@ -57,7 +65,7 @@ export function TransactionList({
     if (!raw) return "";
     const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
     if (isoPattern.test(raw)) {
-      const [, year, month, day] = raw.match(isoPattern)!;
+      const [, year, month] = raw.match(isoPattern)!;
       return `${month}-${year}`;
     }
     return raw;
@@ -75,6 +83,7 @@ export function TransactionList({
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [startDate, setStartDate] = useState(toMonthYear(initialStartDate));
   const [endDate, setEndDate] = useState(toMonthYear(initialEndDate));
+  const [hoveredRecurringId, setHoveredRecurringId] = useState<string | null>(null);
 
   useEffect(() => {
     setStartDate(toMonthYear(initialStartDate));
@@ -182,13 +191,8 @@ export function TransactionList({
     return bTime - aTime;
   });
 
-  const totalIncome = filteredTransactions
-    .filter((transaction) => transaction.type === "income")
-    .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
-  const totalExpense = filteredTransactions
-    .filter((transaction) => transaction.type === "expense")
-    .reduce((acc, transaction) => acc + Number(transaction.amount || 0), 0);
-  const balance = totalIncome - totalExpense;
+  const { totalIncome, totalExpense, totalInvestment, balance } =
+    calculateMonthlyFinancialTotals(filteredTransactions);
 
   useEffect(() => {
     onFilteredDataChange?.(sortedFilteredTransactions);
@@ -200,6 +204,7 @@ export function TransactionList({
       filterType,
       totalIncome,
       totalExpense,
+      totalInvestment,
       balance,
     });
   }, [
@@ -208,6 +213,7 @@ export function TransactionList({
     filterRecurrence,
     totalIncome,
     totalExpense,
+    totalInvestment,
     balance,
     onExportContextChange,
   ]);
@@ -237,6 +243,11 @@ export function TransactionList({
       minimumFractionDigits: 2,
     });
   };
+  const formatBalanceValue = (amount: number) => {
+    const formatted = formatCurrency(amount);
+    if (amount < 0) return `- R$ ${formatted}`;
+    return `R$ ${formatted}`;
+  };
 
   const formatDate = (dateString: string) => {
     const date = parseDateValue(dateString);
@@ -247,13 +258,77 @@ export function TransactionList({
     return `${day}/${month}/${year}`;
   };
 
+  const getRecurrenceCount = (item: Transaction) => {
+    const parsed = Math.floor(Number(item.recurrenceMonths ?? 0));
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+
+    return item.recorrente ? 1 : 0;
+  };
+
+  const getRecurrenceTooltipLabel = (item: Transaction) => {
+    const recurrenceCount = getRecurrenceCount(item);
+    if (recurrenceCount <= 0) return "";
+
+    const parsedCurrent = Math.floor(Number(item.recurrenceCurrent ?? 0));
+    const recurrenceCurrent =
+      Number.isFinite(parsedCurrent) && parsedCurrent > 0
+        ? Math.min(parsedCurrent, recurrenceCount)
+        : 1;
+
+    return `${recurrenceCurrent}/${recurrenceCount}`;
+  };
+
+  const isInvestmentExpense = (item: Transaction) =>
+    item.type === "expense" && isInvestmentCategory(item.category);
+
+  const getTransactionDotStyle = (item: Transaction) => {
+    if (item.type === "income") return styles.typeDotIncome;
+    if (item.type === "ia" || isInvestmentExpense(item)) return styles.typeDotIa;
+    return styles.typeDotExpense;
+  };
+
+  const getTransactionAmountStyle = (item: Transaction) => {
+    if (item.type === "income") return styles.incomeAmount;
+    if (item.type === "ia" || isInvestmentExpense(item)) return styles.iaAmount;
+    return styles.expenseAmount;
+  };
+
+  const renderRecurrenceStatus = (item: Transaction) => {
+    if (!item.recorrente) {
+      return <Text style={styles.reportCellText}>Manual</Text>;
+    }
+
+    const showTooltip = Platform.OS === "web" && hoveredRecurringId === item.id;
+
+    return (
+      <View style={styles.recurrenceStatusWrap}>
+        <Pressable
+          style={styles.recurrenceBadge}
+          onHoverIn={Platform.OS === "web" ? () => setHoveredRecurringId(item.id) : undefined}
+          onHoverOut={Platform.OS === "web" ? () => setHoveredRecurringId((current) => (current === item.id ? null : current)) : undefined}
+        >
+          <Text style={styles.recurrenceBadgeText}>Recorrente</Text>
+        </Pressable>
+        {showTooltip && (
+          <View style={styles.recurrenceTooltip}>
+            <Text style={styles.recurrenceTooltipText}>{getRecurrenceTooltipLabel(item)}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderTransactionItem = ({ item }: { item: Transaction }) => (
     <View
       style={[
         styles.transactionCard,
         item.type === "income"
           ? styles.transactionCardIncome
-          : styles.transactionCardExpense,
+          : item.type === "expense"
+            ? styles.transactionCardExpense
+            : styles.transactionCardIa,
       ]}
     >
       <View style={styles.transactionHeader}>
@@ -262,9 +337,7 @@ export function TransactionList({
             <View
               style={[
                 styles.typeDot,
-                item.type === "income"
-                  ? styles.typeDotIncome
-                  : styles.typeDotExpense,
+                getTransactionDotStyle(item),
               ]}
             />
             <Text style={styles.description}>{item.description}</Text>
@@ -280,12 +353,10 @@ export function TransactionList({
           <Text
             style={[
               styles.amount,
-              item.type === "income"
-                ? styles.incomeAmount
-                : styles.expenseAmount,
+              getTransactionAmountStyle(item),
             ]}
           >
-            {item.type === "income" ? "+" : "-"} R${" "}
+            {item.type === "income" ? "+" : item.type === "expense" ? "-" : ""} R${" "}
             {formatCurrency(item.amount)}
           </Text>
         </View>
@@ -311,6 +382,7 @@ export function TransactionList({
       </View>
     </View>
   );
+  void renderTransactionItem;
 
   const renderReportTransactionItem = ({ item }: { item: Transaction }) => (
     <View style={styles.transactionCard}>
@@ -324,9 +396,7 @@ export function TransactionList({
             <View
               style={[
                 styles.typeDot,
-                item.type === "income"
-                  ? styles.typeDotIncome
-                  : styles.typeDotExpense,
+                getTransactionDotStyle(item),
               ]}
             />
             <Text style={styles.description}>{item.description}</Text>
@@ -338,14 +408,12 @@ export function TransactionList({
 
         <View style={[styles.reportCell, styles.typeColumn]}>
           <Text style={styles.reportCellText}>
-            {item.type === "income" ? "Receita" : "Despesa"}
+            {item.type === "income" ? "Receita" : item.type === "expense" ? "Despesa" : "Ação IA"}
           </Text>
         </View>
 
         <View style={[styles.reportCell, styles.statusColumn]}>
-          <Text style={styles.reportCellText}>
-            {item.recorrente ? "Recorrente" : "Manual"}
-          </Text>
+          {renderRecurrenceStatus(item)}
         </View>
 
         <View
@@ -358,12 +426,10 @@ export function TransactionList({
           <Text
             style={[
               styles.amount,
-              item.type === "income"
-                ? styles.incomeAmount
-                : styles.expenseAmount,
+              getTransactionAmountStyle(item),
             ]}
           >
-            {item.type === "income" ? "+" : "-"} R$ {formatCurrency(item.amount)}
+            {item.type === "income" ? "+" : item.type === "expense" ? "-" : ""} R$ {formatCurrency(item.amount)}
           </Text>
         </View>
       </View>
@@ -603,6 +669,12 @@ export function TransactionList({
             R$ {formatCurrency(totalExpense)}
           </Text>
         </View>
+        <View style={[styles.summaryCard, styles.summaryInvestmentCard]}>
+          <Text style={styles.summaryLabel}>Investimentos</Text>
+          <Text style={[styles.summaryValue, styles.investmentText]}>
+            R$ {formatCurrency(totalInvestment)}
+          </Text>
+        </View>
         <View style={[styles.summaryCard, styles.summaryBalanceCard]}>
           <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>
             Saldo
@@ -616,7 +688,7 @@ export function TransactionList({
                 : styles.summaryBalanceNegative,
             ]}
           >
-            R$ {formatCurrency(balance)}
+            {formatBalanceValue(balance)}
           </Text>
         </View>
       </View>
@@ -826,6 +898,7 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 4,
   },
@@ -845,6 +918,10 @@ const styles = StyleSheet.create({
   summaryExpenseCard: {
     backgroundColor: "rgba(254, 242, 242, 0.92)",
     borderColor: "rgba(239, 68, 68, 0.2)",
+  },
+  summaryInvestmentCard: {
+    backgroundColor: "rgba(239, 246, 255, 0.94)",
+    borderColor: "rgba(37, 99, 235, 0.2)",
   },
   summaryBalanceCard: {
     backgroundColor: "#f8fafc",
@@ -882,6 +959,9 @@ const styles = StyleSheet.create({
   },
   expenseText: {
     color: "#dc2626",
+  },
+  investmentText: {
+    color: "#2563eb",
   },
   ledgerContainer: {
     flex: 1,
@@ -955,6 +1035,46 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "600",
   },
+  recurrenceStatusWrap: {
+    position: "relative",
+    alignSelf: "flex-start",
+  },
+  recurrenceBadge: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  recurrenceBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1d4ed8",
+  },
+  recurrenceTooltip: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    marginTop: 6,
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 144,
+    zIndex: 20,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  recurrenceTooltipText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#f8fafc",
+    fontWeight: "600",
+  },
   dateColumn: {
     flex: 1.1,
   },
@@ -990,6 +1110,9 @@ const styles = StyleSheet.create({
   transactionCardExpense: {
     backgroundColor: "#ffffff",
   },
+  transactionCardIa: {
+    backgroundColor: "#ffffff",
+  },
   transactionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1021,6 +1144,9 @@ const styles = StyleSheet.create({
   typeDotExpense: {
     backgroundColor: "#ef4444",
   },
+  typeDotIa: {
+    backgroundColor: "#2563eb",
+  },
   description: {
     fontSize: 13,
     fontWeight: "600",
@@ -1046,6 +1172,9 @@ const styles = StyleSheet.create({
   },
   expenseAmount: {
     color: "#dc2626", // red-600
+  },
+  iaAmount: {
+    color: "#2563eb",
   },
   actionButtons: {
     flexDirection: "row",

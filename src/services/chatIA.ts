@@ -45,7 +45,11 @@ async function sendWithFallback(message: string): Promise<AIResponse> {
 async function sendViaBackend(message: string): Promise<AIResponse> {
   const response = await apiService.sendChatIA(message);
   const normalizedResponse = normalizeAIResponse(response as JsonValue);
-  return normalizedResponse;
+  return {
+    ...normalizedResponse,
+    source: "backend-api",
+    sourceNote: "Resposta veio do endpoint de chat do backend. O uso da IA aqui e inferido pelo fluxo do backend.",
+  };
 }
 
 async function sendViaWebhook(message: string): Promise<AIResponse> {
@@ -81,7 +85,11 @@ async function sendViaWebhook(message: string): Promise<AIResponse> {
         throw new Error(message);
       }
 
-      return normalizeAIResponse(parsedResponse);
+      return {
+        ...normalizeAIResponse(parsedResponse),
+        source: "webhook",
+        sourceNote: "Resposta veio do webhook do chat. O uso da IA depende do fluxo configurado no n8n.",
+      };
     } catch (error: any) {
       const message = formatWebhookFetchError(url, error);
       attemptErrors.push(`${url} -> ${message}`);

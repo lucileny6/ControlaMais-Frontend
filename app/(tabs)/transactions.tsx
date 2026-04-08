@@ -27,19 +27,20 @@ interface Transaction {
   deleteCandidates?: string[];
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: "income" | "expense" | "ia";
   category: string;
   date: string;
   notes?: string;
   recorrente?: boolean;
   recurrenceMonths?: number;
+  recurrenceCurrent?: number;
   createdViaChat?: boolean;
 }
 
 interface ExportRow {
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: "income" | "expense" | "ia";
   category: string;
   date: string;
   notes?: string;
@@ -50,11 +51,25 @@ interface ExportContext {
   filterType: "all" | "income" | "expense";
   totalIncome: number;
   totalExpense: number;
+  totalInvestment: number;
   balance: number;
 }
 
 const DASHBOARD_GRADIENT = ["#F4F7FB", "#EAF1F8", "#E2ECF6", "#DCE7F4"] as const;
-const MONTH_SHORT_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"] as const;
+const MONTH_PICKER_NAMES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;
 const getCurrentMonthValue = () =>
   `${String(new Date().getMonth() + 1).padStart(2, "0")}-${new Date().getFullYear()}`;
 const normalizeCategoryKey = (value: string) =>
@@ -69,7 +84,7 @@ const normalizeTransactionCategory = (
 ) => {
   const raw = String(value ?? "").trim();
   if (!raw) return "Sem categoria";
-  if (type === "income") return raw;
+  if (type === "income" || type === "ia") return raw;
 
   const normalized = normalizeCategoryKey(raw);
 
@@ -138,6 +153,7 @@ export default function TransactionsPage() {
     filterType: "all",
     totalIncome: 0,
     totalExpense: 0,
+    totalInvestment: 0,
     balance: 0,
   });
   const [modalOpen, setModalOpen] = useState(false);
@@ -150,6 +166,7 @@ export default function TransactionsPage() {
   const [deleteMonthPromptOpen, setDeleteMonthPromptOpen] = useState(false);
   const [monthDraft, setMonthDraft] = useState(getCurrentMonthValue());
   const [yearDraft, setYearDraft] = useState(new Date().getFullYear());
+  const [yearSelectOpen, setYearSelectOpen] = useState(false);
   const [initialPeriod, setInitialPeriod] = useState({ startDate: "", endDate: "" });
   const [periodSyncToken, setPeriodSyncToken] = useState(0);
   const [selectedMonthLabel, setSelectedMonthLabel] = useState("");
@@ -196,6 +213,34 @@ export default function TransactionsPage() {
   };
 
   const normalizeSeriesText = (value: string) => String(value ?? "").trim().toLowerCase();
+  const buildRecurringSeriesKey = (transaction: Pick<Transaction, "type" | "amount" | "description" | "category">) =>
+    [
+      transaction.type,
+      Number(transaction.amount ?? 0).toFixed(2),
+      normalizeSeriesText(transaction.description),
+      normalizeSeriesText(transaction.category),
+    ].join("|");
+  const getMonthDifference = (startDate: string, currentDate: string) => {
+    const normalizedStart = normalizeComparableDate(startDate);
+    const normalizedCurrent = normalizeComparableDate(currentDate);
+    if (!normalizedStart || !normalizedCurrent) return 0;
+
+    const startYear = Number(normalizedStart.slice(0, 4));
+    const startMonth = Number(normalizedStart.slice(5, 7));
+    const currentYear = Number(normalizedCurrent.slice(0, 4));
+    const currentMonth = Number(normalizedCurrent.slice(5, 7));
+
+    if (
+      !Number.isFinite(startYear) ||
+      !Number.isFinite(startMonth) ||
+      !Number.isFinite(currentYear) ||
+      !Number.isFinite(currentMonth)
+    ) {
+      return 0;
+    }
+
+    return (currentYear - startYear) * 12 + (currentMonth - startMonth);
+  };
 
   const hasValidDeleteCandidates = (transaction: Transaction) =>
     (transaction.deleteCandidates ?? []).some((candidate) => {
@@ -213,6 +258,8 @@ export default function TransactionsPage() {
       Math.abs(Number(transaction.amount ?? 0) - Number(reference.amount ?? 0)) < 0.001 &&
       normalizeSeriesText(transaction.description) === normalizeSeriesText(reference.description) &&
       normalizeSeriesText(transaction.category) === normalizeSeriesText(reference.category);
+  const getTransactionIdentityKey = (transaction: Pick<Transaction, "type" | "id" | "backendId">) =>
+    `${transaction.type}-${String(transaction.backendId ?? transaction.id).trim()}`;
 
   const getRecurringSeriesTransactions = (reference: Transaction) =>
     Array.from(
@@ -222,7 +269,7 @@ export default function TransactionsPage() {
           .sort((left, right) =>
             normalizeComparableDate(left.date).localeCompare(normalizeComparableDate(right.date)),
           )
-          .map((item) => [item.backendId ?? item.id, item]),
+          .map((item) => [getTransactionIdentityKey(item), item]),
       ).values(),
     );
 
@@ -292,7 +339,7 @@ export default function TransactionsPage() {
       new Map(
         sourceTransactions
           .filter((transaction) => normalizeComparableDate(transaction.date).slice(0, 7) === monthKey)
-          .map((transaction) => [transaction.backendId ?? transaction.id, transaction]),
+          .map((transaction) => [getTransactionIdentityKey(transaction), transaction]),
       ).values(),
     );
   };
@@ -354,6 +401,13 @@ export default function TransactionsPage() {
     !editingTransaction && prefilledTransaction?.category === "Investimento"
       ? "Nova Meta de Investimento"
       : modalTitle;
+  const transactionFormInitialData: Partial<TransactionFormData> | undefined =
+    editingTransaction && editingTransaction.type !== "ia"
+      ? {
+          ...editingTransaction,
+          type: editingTransaction.type,
+        }
+      : prefilledTransaction ?? (quickActionType ? { type: quickActionType } : undefined);
 
   const openPeriodPrompt = () => {
     const currentMonth = initialPeriod.startDate
@@ -361,6 +415,7 @@ export default function TransactionsPage() {
       : getCurrentMonthValue();
     setMonthDraft(currentMonth);
     setYearDraft(Number(currentMonth.slice(3, 7)));
+    setYearSelectOpen(false);
     setPeriodPromptOpen(true);
   };
 
@@ -385,11 +440,13 @@ export default function TransactionsPage() {
       const monthTransactions = getTransactionsForMonth(sourceMonthValue, currentTransactions).filter(
         (transaction) => activeCopyFilter === "all" || transaction.type === activeCopyFilter,
       );
+      const skippedIaTransactions = monthTransactions.filter((transaction) => transaction.type === "ia");
+      const skippedIaCount = skippedIaTransactions.length;
       const skippedRecurringTransactions = monthTransactions.filter((transaction) => transaction.recorrente);
       const skippedRecurringCount = skippedRecurringTransactions.length;
       const sourceTransactions = monthTransactions.filter(
         (transaction) =>
-          !transaction.recorrente,
+          !transaction.recorrente && transaction.type !== "ia",
       );
 
       if (sourceTransactions.length === 0) {
@@ -403,7 +460,11 @@ export default function TransactionsPage() {
           skippedRecurringCount > 0
             ? ` ${skippedRecurringCount} lançamentos recorrentes foram ignorados.`
             : "";
-        showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}`);
+        const iaHint =
+          skippedIaCount > 0
+            ? ` ${skippedIaCount} ações financeiras IA foram ignoradas.`
+            : "";
+        showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}${iaHint}`);
         return;
       }
 
@@ -453,6 +514,13 @@ export default function TransactionsPage() {
           .join(", ");
         resultMessage = `${resultMessage} ${skippedRecurringCount} lançamentos recorrentes foram ignorados.${recurringPreview ? ` Ex.: ${recurringPreview}.` : ""}`;
       }
+      if (skippedIaCount > 0) {
+        const iaPreview = skippedIaTransactions
+          .slice(0, 3)
+          .map((transaction) => `${transaction.description} (${transaction.category})`)
+          .join(", ");
+        resultMessage = `${resultMessage} ${skippedIaCount} ações financeiras IA foram ignoradas.${iaPreview ? ` Ex.: ${iaPreview}.` : ""}`;
+      }
       if (failedCount > 0) {
         const failedPreview = failedTransactionLabels.slice(0, 3).join(", ");
         resultMessage = `${resultMessage} ${failedCount} não puderam ser copiados.${failedPreview ? ` Ex.: ${failedPreview}.` : ""}`;
@@ -478,9 +546,12 @@ export default function TransactionsPage() {
         (transaction) =>
         (activeCopyFilter === "all" || transaction.type === activeCopyFilter),
     );
+    const skippedIaCount = monthTransactions.filter((transaction) => transaction.type === "ia").length;
     const skippedRecurringTransactions = monthTransactions.filter((transaction) => transaction.recorrente);
     const skippedRecurringCount = skippedRecurringTransactions.length;
-    const sourceTransactions = monthTransactions.filter((transaction) => !transaction.recorrente);
+    const sourceTransactions = monthTransactions.filter(
+      (transaction) => !transaction.recorrente && transaction.type !== "ia",
+    );
 
     if (!sourcePeriod || !targetPeriod) {
       showMessage("Erro", "Não foi possível identificar o mês atual.");
@@ -498,7 +569,11 @@ export default function TransactionsPage() {
         skippedRecurringCount > 0
           ? ` ${skippedRecurringCount} lançamentos recorrentes serão ignorados.`
           : "";
-      showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}`);
+      const iaHint =
+        skippedIaCount > 0
+          ? ` ${skippedIaCount} ações financeiras IA serão ignoradas.`
+          : "";
+      showMessage("Sem dados", `Não há ${filterLabel} em ${sourcePeriod.label} para copiar.${recurringHint}${iaHint}`);
       return;
     }
 
@@ -512,7 +587,11 @@ export default function TransactionsPage() {
       skippedRecurringCount > 0
         ? ` ${skippedRecurringCount} recorrentes serão ignorados.`
         : "";
-    const confirmMessage = `Copiar ${sourceTransactions.length} ${confirmLabel} de ${sourcePeriod.label} para ${targetPeriod.label}?${recurringHint}`;
+    const iaHint =
+      skippedIaCount > 0
+        ? ` ${skippedIaCount} ações IA serão ignoradas.`
+        : "";
+    const confirmMessage = `Copiar ${sourceTransactions.length} ${confirmLabel} de ${sourcePeriod.label} para ${targetPeriod.label}?${recurringHint}${iaHint}`;
 
     if (Platform.OS === "web") {
       const webEnv = globalThis as { confirm?: (message?: string) => boolean };
@@ -640,29 +719,139 @@ export default function TransactionsPage() {
         return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
       };
 
+      const resolveTransactionType = (value: any): Transaction["type"] => {
+        const rawType = String(
+          value?.type ??
+            value?.tipo ??
+            value?.sourceType ??
+            value?.entityType ??
+            value?.recordType ??
+            value?.resourceType ??
+            value?.origemTipo ??
+            value?.tipoRegistro ??
+            value?.transactionType ??
+            value?.natureza ??
+            value?.acaoFinanceira?.type ??
+            value?.acaoFinanceira?.tipo ??
+            value?.receita?.type ??
+            value?.receita?.tipo ??
+            value?.despesa?.type ??
+            value?.despesa?.tipo ??
+            "",
+        )
+          .toLowerCase()
+          .trim();
+
+        if (
+          rawType === "income" ||
+          rawType === "icome" ||
+          rawType === "receita" ||
+          rawType === "entrada" ||
+          rawType === "ganho"
+        ) {
+          return "income";
+        }
+
+        if (
+          rawType === "ia" ||
+          rawType === "acaofinanceira" ||
+          rawType === "acao_financeira" ||
+          rawType === "ai"
+        ) {
+          return "ia";
+        }
+
+        if (
+          rawType === "expense" ||
+          rawType === "despesa" ||
+          rawType === "saida" ||
+          rawType === "gasto"
+        ) {
+          return "expense";
+        }
+
+        if (value?.receita && !value?.despesa) {
+          return "income";
+        }
+
+        if (
+          value?.acaoFinanceira ||
+          value?.acaoFinanceiraId !== undefined ||
+          value?.idAcaoFinanceira !== undefined
+        ) {
+          return "ia";
+        }
+
+        return "expense";
+      };
+
       const resolveTransactionIds = (item: any, index: number) => {
         const candidates: string[] = [];
         const pushCandidate = (value: unknown) => {
           if (value === null || value === undefined) return;
+          if (typeof value === "object" || typeof value === "function") return;
           const normalized = String(value).trim();
           if (!normalized) return;
           if (!candidates.includes(normalized)) candidates.push(normalized);
         };
+        const collectNestedIds = (value: unknown, depth = 0, visited = new WeakSet<object>()) => {
+          if (depth > 2 || !value || typeof value !== "object") return;
+          if (visited.has(value as object)) return;
+          visited.add(value as object);
+
+          for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+            const normalizedKey = key.toLowerCase();
+            const isForeignId = normalizedKey.includes("user") || normalizedKey.includes("usuario");
+            const isLikelyId =
+              normalizedKey === "id" ||
+              normalizedKey.endsWith("id") ||
+              normalizedKey.includes("_id");
+
+            if (isLikelyId && !isForeignId) {
+              pushCandidate(nestedValue);
+            }
+
+            if (nestedValue && typeof nestedValue === "object") {
+              collectNestedIds(nestedValue, depth + 1, visited);
+            }
+          }
+        };
 
         const preferredKeys = [
-          "id",
-          "_id",
-          "Id",
-          "ID",
-          "transactionId",
-          "transacaoId",
-          "idTransacao",
+          "acaoFinanceiraId",
+          "idAcaoFinanceira",
+          "acao_id",
           "receitaId",
           "despesaId",
           "id_receita",
           "id_despesa",
+          "transactionId",
+          "transacaoId",
+          "idTransacao",
+          "id",
+          "_id",
+          "Id",
+          "ID",
           "uuid",
         ];
+
+        pushCandidate(item?.acaoFinanceira?.id);
+        pushCandidate(item?.acaoFinanceira?._id);
+        pushCandidate(item?.acaoFinanceira?.acaoFinanceiraId);
+        pushCandidate(item?.acao?.id);
+        pushCandidate(item?.acao?._id);
+        pushCandidate(item?.receita?.id);
+        pushCandidate(item?.receita?._id);
+        pushCandidate(item?.receita?.receitaId);
+        pushCandidate(item?.receita?.transactionId);
+        pushCandidate(item?.despesa?.id);
+        pushCandidate(item?.despesa?._id);
+        pushCandidate(item?.despesa?.despesaId);
+        pushCandidate(item?.despesa?.transactionId);
+        pushCandidate(item?.transacao?.id);
+        pushCandidate(item?.transacao?._id);
+        pushCandidate(item?.transaction?.id);
+        pushCandidate(item?.transaction?._id);
 
         for (const key of preferredKeys) {
           pushCandidate(item?.[key]);
@@ -676,9 +865,7 @@ export default function TransactionsPage() {
           pushCandidate(value);
         }
 
-        pushCandidate(item?.receita?.id);
-        pushCandidate(item?.despesa?.id);
-        pushCandidate(item?.transacao?.id);
+        collectNestedIds(item);
 
         const fallback = `tx-${index}`;
         if (candidates.length === 0) {
@@ -706,15 +893,23 @@ export default function TransactionsPage() {
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
           .toLowerCase();
-        const rawType = String(t?.type ?? t?.tipo ?? "").toLowerCase().trim();
-        const resolvedType =
-          rawType === "income" ||
-          rawType === "icome" ||
-          rawType === "receita" ||
-          rawType === "entrada"
-            ? "income"
-            : "expense";
+        const resolvedType = resolveTransactionType(t);
         const rawCategory = String(t?.category ?? t?.categoria ?? "Sem categoria");
+        const parsedRecurrenceMonths = Math.floor(
+          Number(
+            t?.recurrenceMonths ??
+              t?.recorrenciaMeses ??
+              t?.quantidadeMeses ??
+              t?.quantidadeParcelas ??
+              t?.numeroParcelas ??
+              t?.parcelas ??
+              t?.totalParcelas,
+          ),
+        );
+        const recurrenceMonths =
+          Number.isFinite(parsedRecurrenceMonths) && parsedRecurrenceMonths > 0
+            ? parsedRecurrenceMonths
+            : undefined;
 
         return {
         backendId: ids.primaryId,
@@ -735,6 +930,7 @@ export default function TransactionsPage() {
         ),
         notes: notes || undefined,
         recorrente: Boolean(t?.recorrente ?? t?.recurring ?? t?.isRecurring ?? t?.recorrencia),
+        recurrenceMonths,
         createdViaChat:
           originSignature.includes("[chat]") ||
           originSignature.includes("criado via chat") ||
@@ -745,15 +941,64 @@ export default function TransactionsPage() {
         id: `${transaction.type}-${transaction.backendId}-${index}`,
       }));
 
-      const monthCounts = normalized.reduce<Record<string, number>>((acc, transaction) => {
+      const recurringSeriesMetadata = normalized.reduce<
+        Record<string, { total: number; startDate: string }>
+      >((acc, transaction) => {
+        if (!transaction.recorrente) return acc;
+
+        const seriesKey = buildRecurringSeriesKey(transaction);
+        const currentStartDate = normalizeComparableDate(transaction.date);
+        const existing = acc[seriesKey];
+
+        if (!existing) {
+          acc[seriesKey] = {
+            total: 1,
+            startDate: currentStartDate,
+          };
+          return acc;
+        }
+
+        acc[seriesKey] = {
+          total: existing.total + 1,
+          startDate:
+            existing.startDate && currentStartDate
+              ? (existing.startDate < currentStartDate ? existing.startDate : currentStartDate)
+              : existing.startDate || currentStartDate,
+        };
+        return acc;
+      }, {});
+
+      const enrichedTransactions = normalized.map((transaction) => {
+        if (!transaction.recorrente) {
+          return transaction;
+        }
+
+        const recurringSeries = recurringSeriesMetadata[buildRecurringSeriesKey(transaction)];
+        const inferredRecurrenceMonths = recurringSeries?.total ?? 0;
+        const monthsElapsed = recurringSeries?.startDate
+          ? Math.max(0, getMonthDifference(recurringSeries.startDate, transaction.date))
+          : 0;
+        const totalRecurrenceMonths =
+          Math.max(transaction.recurrenceMonths ?? 0, inferredRecurrenceMonths) || undefined;
+
+        return {
+          ...transaction,
+          recurrenceMonths: totalRecurrenceMonths,
+          recurrenceCurrent: totalRecurrenceMonths
+            ? Math.min(totalRecurrenceMonths, monthsElapsed + 1)
+            : monthsElapsed + 1,
+        };
+      });
+
+      const monthCounts = enrichedTransactions.reduce<Record<string, number>>((acc, transaction) => {
         const monthKey = getMonthKey(transaction.date);
         acc[monthKey] = (acc[monthKey] ?? 0) + 1;
         return acc;
       }, {});
       console.log("[Transactions] normalized month counts:", monthCounts);
 
-      setTransactions(normalized);
-      return normalized;
+      setTransactions(enrichedTransactions);
+      return enrichedTransactions;
     } catch (error: any) {
       setTransactions([]);
       const message = String(error?.message ?? "Nao foi possivel carregar transacoes");
@@ -1104,6 +1349,8 @@ export default function TransactionsPage() {
               date: payload.data,
               notes: data.notes,
               recorrente: data.recorrente,
+              recurrenceMonths: data.recorrente ? recurringOccurrencesTotal : undefined,
+              recurrenceCurrent: data.recorrente ? 1 : undefined,
             },
             ...previous,
           ]);
@@ -1162,7 +1409,7 @@ export default function TransactionsPage() {
       });
 
       const uniqueSeriesTransactions = Array.from(
-        new Map(seriesTransactions.map((item) => [item.backendId ?? item.id, item])).values(),
+        new Map(seriesTransactions.map((item) => [getTransactionIdentityKey(item), item])).values(),
       );
 
       let deletedCount = 0;
@@ -1212,6 +1459,11 @@ export default function TransactionsPage() {
   };
 
   const handleEdit = (transaction: Transaction) => {
+    if (transaction.type === "ia") {
+      showMessage("Edição indisponível", "Ações financeiras IA não podem ser editadas por este formulário.");
+      return;
+    }
+
     const currentDate = normalizeComparableDate(transaction.date);
     const recurrenceMonths = transaction.recorrente
       ? Math.max(
@@ -1244,7 +1496,6 @@ export default function TransactionsPage() {
 
   const getDeletableMonthTransactions = (monthValue: string) =>
     getTransactionsForMonth(monthValue)
-      .filter((transaction) => !transaction.recorrente)
       .map((transaction) => ({
         ...transaction,
         deleteCandidates: getValidDeleteCandidates(transaction),
@@ -1265,7 +1516,7 @@ export default function TransactionsPage() {
     const monthTransactions = getDeletableMonthTransactions(selectedMonthValue);
 
     if (monthTransactions.length === 0) {
-      showMessage("Sem lançamentos", `Não há lançamentos normais excluíveis em ${selectedPeriod.label}.`);
+      showMessage("Sem lançamentos", `Não há lançamentos excluíveis em ${selectedPeriod.label}.`);
       return;
     }
 
@@ -1275,6 +1526,7 @@ export default function TransactionsPage() {
 
       let deletedCount = 0;
       let failedCount = 0;
+      let lastError: unknown = null;
 
       for (const transaction of monthTransactions) {
         let deleted = false;
@@ -1285,7 +1537,15 @@ export default function TransactionsPage() {
             deleted = true;
             deletedCount += 1;
             break;
-          } catch {
+          } catch (error) {
+            lastError = error;
+            console.log("[Transactions] month delete candidate failed:", {
+              transactionId: transaction.id,
+              backendId: transaction.backendId,
+              type: transaction.type,
+              candidateId,
+              message: String((error as any)?.message ?? error),
+            });
             // Continue trying other candidate IDs for the same transaction.
           }
         }
@@ -1296,7 +1556,7 @@ export default function TransactionsPage() {
       }
 
       if (deletedCount === 0) {
-        throw new Error("Não foi possível excluir os lançamentos deste mês.");
+        throw lastError ?? new Error("Não foi possível excluir os lançamentos deste mês.");
       }
 
       await loadTransactions();
@@ -1330,14 +1590,9 @@ export default function TransactionsPage() {
     }
 
     const normalCount = getDeletableMonthTransactions(selectedMonthValue).length;
-    const recurringCount = getTransactionsForMonth(selectedMonthValue).filter((transaction) => transaction.recorrente).length;
 
     if (normalCount === 0) {
-      const recurringHint =
-        recurringCount > 0
-          ? " Os recorrentes precisam ser tratados fora da exclusão em lote para evitar apagar outros meses."
-          : "";
-      showMessage("Sem lançamentos", `Não há lançamentos normais excluíveis em ${selectedPeriod.label}.${recurringHint}`);
+      showMessage("Sem lançamentos", `Não há lançamentos excluíveis em ${selectedPeriod.label}.`);
       return;
     }
 
@@ -1471,8 +1726,9 @@ export default function TransactionsPage() {
 
     const detailLines = exportRows.map((item) => {
       const date = new Date(item.date).toLocaleDateString("pt-BR");
-      const type = item.type === "income" ? "Receita" : "Despesa";
-      const value = `${item.type === "income" ? "+" : "-"} R$ ${formatCurrency(item.amount)}`;
+      const type = item.type === "income" ? "Receita" : item.type === "expense" ? "Despesa" : "Ação IA";
+      const valuePrefix = item.type === "income" ? "+" : item.type === "expense" ? "-" : "";
+      const value = `${valuePrefix}${valuePrefix ? " " : ""}R$ ${formatCurrency(item.amount)}`;
       return (
         `${fitCell(date, 12)}` +
         `${fitCell(item.description, 30)}` +
@@ -1564,11 +1820,8 @@ export default function TransactionsPage() {
     ? getMonthValueFromDate(initialPeriod.startDate)
     : "";
   const selectedDeletePeriod = getPeriodFromMonth(selectedDeleteMonthValue);
-  const deleteMonthNormalCount = selectedDeleteMonthValue
+  const deleteMonthDeleteCount = selectedDeleteMonthValue
     ? getDeletableMonthTransactions(selectedDeleteMonthValue).length
-    : 0;
-  const deleteMonthRecurringCount = selectedDeleteMonthValue
-    ? getTransactionsForMonth(selectedDeleteMonthValue).filter((transaction) => transaction.recorrente).length
     : 0;
 
   if (isLoadingAuth) {
@@ -1622,13 +1875,6 @@ export default function TransactionsPage() {
                       <Text style={styles.deleteMonthButtonText}>Excluir mês</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.secondaryHeaderButton, loading && styles.headerButtonDisabled]}
-                      onPress={() => router.push("/(tabs)/goal")}
-                      disabled={loading}
-                    >
-                      <Text style={styles.secondaryHeaderButtonText}>Ver Metas</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
                       style={[styles.exportButton, loading && styles.headerButtonDisabled]}
                       onPress={handleExportPdf}
                       disabled={loading}
@@ -1671,11 +1917,7 @@ export default function TransactionsPage() {
               </View>
               <TransactionForm
                 onSubmit={handleSubmit}
-                initialData={
-                  editingTransaction ??
-                  prefilledTransaction ??
-                  (quickActionType ? { type: quickActionType } : undefined)
-                }
+                initialData={transactionFormInitialData}
                 isLoading={loading}
                 onCancel={closeModal}
               />
@@ -1698,7 +1940,13 @@ export default function TransactionsPage() {
 
         <Modal visible={periodPromptOpen} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-            <Pressable style={styles.modalBackdrop} onPress={() => setPeriodPromptOpen(false)} />
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => {
+                setYearSelectOpen(false);
+                setPeriodPromptOpen(false);
+              }}
+            />
             <View style={styles.periodPromptContent}>
               <Text style={styles.periodPromptTitle}>Selecionar período</Text>
               <Text style={styles.periodPromptText}>
@@ -1730,28 +1978,44 @@ export default function TransactionsPage() {
                 </Text>
               </TouchableOpacity>
 
-              <View style={styles.periodYearRow}>
-                {availableYears.map((year) => {
-                  const isActive = yearDraft === year;
+              <View style={styles.periodYearSelector}>
+                <Text style={styles.periodSectionLabel}>Ano</Text>
+                <TouchableOpacity
+                  style={styles.periodYearTrigger}
+                  onPress={() => setYearSelectOpen((current) => !current)}
+                >
+                  <Text style={styles.periodYearTriggerText}>{yearDraft}</Text>
+                  <Text style={styles.periodYearTriggerArrow}>{yearSelectOpen ? "▲" : "▼"}</Text>
+                </TouchableOpacity>
 
-                  return (
-                    <TouchableOpacity
-                      key={year}
-                      style={[styles.periodYearChip, isActive && styles.periodYearChipActive]}
-                      onPress={() => setYearDraft(year)}
-                    >
-                      <Text
-                        style={[styles.periodYearChipText, isActive && styles.periodYearChipTextActive]}
-                      >
-                        {year}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {yearSelectOpen && (
+                  <View style={styles.periodYearDropdown}>
+                    {availableYears.map((year) => {
+                      const isActive = yearDraft === year;
+
+                      return (
+                        <TouchableOpacity
+                          key={year}
+                          style={[styles.periodYearOption, isActive && styles.periodYearOptionActive]}
+                          onPress={() => {
+                            setYearDraft(year);
+                            setYearSelectOpen(false);
+                          }}
+                        >
+                          <Text
+                            style={[styles.periodYearOptionText, isActive && styles.periodYearOptionTextActive]}
+                          >
+                            {year}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
               <View style={styles.periodMonthGrid}>
-                {MONTH_SHORT_NAMES.map((monthLabel, index) => {
+                {MONTH_PICKER_NAMES.map((monthLabel, index) => {
                   const monthValue = `${String(index + 1).padStart(2, "0")}-${yearDraft}`;
                   const isActive = Boolean(initialPeriod.startDate) && monthDraft === monthValue;
 
@@ -1774,7 +2038,10 @@ export default function TransactionsPage() {
               <View style={styles.periodPromptActions}>
                 <TouchableOpacity
                   style={styles.periodPromptButton}
-                  onPress={() => setPeriodPromptOpen(false)}
+                  onPress={() => {
+                    setYearSelectOpen(false);
+                    setPeriodPromptOpen(false);
+                  }}
                 >
                   <Text style={styles.periodPromptButtonText}>Fechar</Text>
                 </TouchableOpacity>
@@ -1790,33 +2057,25 @@ export default function TransactionsPage() {
               <Text style={styles.deleteMonthPromptTitle}>Excluir mês</Text>
               <Text style={styles.deleteMonthPromptText}>
                 {selectedDeletePeriod
-                  ? `A exclusão em lote vai remover apenas lançamentos normais de ${selectedDeletePeriod.label}.`
+                  ? `A exclusão em lote vai percorrer todas as transações excluíveis de ${selectedDeletePeriod.label}.`
                   : "Escolha o que deseja excluir no mês selecionado."}
               </Text>
 
               <TouchableOpacity
                 style={[
                   styles.deleteMonthOptionButton,
-                  deleteMonthNormalCount === 0 && styles.headerButtonDisabled,
+                  deleteMonthDeleteCount === 0 && styles.headerButtonDisabled,
                 ]}
                 onPress={() => {
                   void executeDeleteMonth();
                 }}
-                disabled={deleteMonthNormalCount === 0 || loading}
+                disabled={deleteMonthDeleteCount === 0 || loading}
               >
-                <Text style={styles.deleteMonthOptionTitle}>Excluir normais</Text>
+                <Text style={styles.deleteMonthOptionTitle}>Excluir transações</Text>
                 <Text style={styles.deleteMonthOptionText}>
-                  {deleteMonthNormalCount} lançamentos excluíveis
+                  {deleteMonthDeleteCount} lançamentos excluíveis
                 </Text>
               </TouchableOpacity>
-              {deleteMonthRecurringCount > 0 && (
-                <View style={[styles.deleteMonthOptionButton, styles.deleteMonthOptionInfo]}>
-                  <Text style={styles.deleteMonthOptionTitle}>Recorrentes protegidos</Text>
-                  <Text style={styles.deleteMonthOptionText}>
-                    {deleteMonthRecurringCount} recorrentes deste mês não entram na exclusão em lote para evitar apagar outros meses.
-                  </Text>
-                </View>
-              )}
 
               <View style={styles.deleteMonthPromptActions}>
                 <TouchableOpacity
@@ -2086,12 +2345,43 @@ const styles = StyleSheet.create({
   periodQuickOptionHintActive: {
     color: "rgba(248,250,252,0.78)",
   },
-  periodYearRow: {
+  periodSectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  periodYearSelector: {
+    gap: 10,
+  },
+  periodYearTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.24)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  periodYearTriggerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  periodYearTriggerArrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  periodYearDropdown: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-  periodYearChip: {
+  periodYearOption: {
     minWidth: 76,
     backgroundColor: "#ffffff",
     borderWidth: 1,
@@ -2101,16 +2391,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
-  periodYearChipActive: {
+  periodYearOptionActive: {
     backgroundColor: "#dbeafe",
     borderColor: "#60a5fa",
   },
-  periodYearChipText: {
+  periodYearOptionText: {
     fontSize: 13,
     fontWeight: "700",
     color: "#64748b",
   },
-  periodYearChipTextActive: {
+  periodYearOptionTextActive: {
     color: "#1d4ed8",
   },
   periodMonthGrid: {
@@ -2119,8 +2409,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   periodMonthChip: {
-    width: "22%",
-    minWidth: 64,
+    width: "31%",
+    minWidth: 96,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.24)",
@@ -2133,9 +2423,10 @@ const styles = StyleSheet.create({
     borderColor: "#0f172a",
   },
   periodMonthChipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#334155",
+    textAlign: "center",
   },
   periodMonthChipTextActive: {
     color: "#f8fafc",

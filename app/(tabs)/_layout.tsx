@@ -23,41 +23,35 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           title: "Dashboard",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📊</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>Ã°Å¸â€œÅ </Text>,
         }}
       />
       <Tabs.Screen
         name="transactions"
         options={{
-          title: "Transações",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>💳</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="reports"
-        options={{
-          title: "Relatorios",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📈</Text>,
+          title: "TransaÃƒÂ§ÃƒÂµes",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>Ã°Å¸â€™Â³</Text>,
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: "IA",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🤖</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>Ã°Å¸Â¤â€“</Text>,
         }}
       />
       <Tabs.Screen
         name="goal"
         options={{
           title: "Metas",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🎯</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>Ã°Å¸Å½Â¯</Text>,
         }}
       />
       <Tabs.Screen
         name="graphs"
         options={{
-          href: null,
+          title: "Grafico",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>Ã°Å¸â€œË†</Text>,
         }}
       />
       <Tabs.Screen

@@ -5,9 +5,10 @@ interface ChatMessageProps {
   message: string;
   isUser: boolean;
   timestamp: Date;
+  sourceLabel?: string;
 }
 
-export function ChatMessage({ message, isUser, timestamp }: ChatMessageProps) {
+export function ChatMessage({ message, isUser, timestamp, sourceLabel }: ChatMessageProps) {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
@@ -46,9 +47,14 @@ export function ChatMessage({ message, isUser, timestamp }: ChatMessageProps) {
             {message}
           </Text>
         </View>
-        <Text style={styles.timestamp}>
-          {formatTime(timestamp)}
-        </Text>
+        <View style={styles.metaRow}>
+          {!!sourceLabel && !isUser && (
+            <Text style={styles.sourceLabel}>{sourceLabel}</Text>
+          )}
+          <Text style={styles.timestamp}>
+            {formatTime(timestamp)}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -125,5 +131,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7b8b9f',
     paddingHorizontal: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  sourceLabel: {
+    fontSize: 11,
+    color: '#4f6b8a',
+    fontWeight: '600',
   },
 });

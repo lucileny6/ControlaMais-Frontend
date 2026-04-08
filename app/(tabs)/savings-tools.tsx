@@ -24,7 +24,7 @@ interface Transaction {
   id: string;
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: "income" | "expense" | "ia";
   category: string;
   date: string;
 }
@@ -32,6 +32,56 @@ interface Transaction {
 type EstadoFinanceiro = Record<string, number>;
 
 const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
+
+function getFinancialStatus(totalIncome: number, totalExpenses: number) {
+  if (totalIncome <= 0) {
+    return totalExpenses > 0
+      ? {
+          label: "Desequilibrado",
+          accent: "#c44747",
+          tone: "danger" as const,
+          description: "Ha gastos no periodo sem receita registrada para sustentar o fechamento.",
+          expenseRate: 1,
+        }
+      : {
+          label: "Controlado",
+          accent: "#0d8a67",
+          tone: "positive" as const,
+          description: "Nao houve movimentacao suficiente no periodo para indicar pressao no orcamento.",
+          expenseRate: 0,
+        };
+  }
+
+  const expenseRate = totalExpenses / totalIncome;
+
+  if (expenseRate <= 0.6) {
+    return {
+      label: "Controlado",
+      accent: "#0d8a67",
+      tone: "positive" as const,
+      description: "Os gastos ficaram dentro da faixa ideal de ate 60% da receita.",
+      expenseRate,
+    };
+  }
+
+  if (expenseRate <= 0.8) {
+    return {
+      label: "Equilibrado",
+      accent: "#f59e0b",
+      tone: "warning" as const,
+      description: "Os gastos ainda estao administraveis, mas ja pedem mais atencao.",
+      expenseRate,
+    };
+  }
+
+  return {
+    label: "Desequilibrado",
+    accent: "#c44747",
+    tone: "danger" as const,
+    description: "Os gastos passaram da zona segura e merecem corte ou replanejamento.",
+    expenseRate,
+  };
+}
 
 export default function SavingsToolsPage() {
   const router = useRouter();
@@ -54,6 +104,7 @@ export default function SavingsToolsPage() {
   const [expenseLimit, setExpenseLimit] = useState(0);
   const [totalPotentialSavings, setTotalPotentialSavings] = useState(0);
   const [transactionCount, setTransactionCount] = useState(0);
+  const financialStatus = getFinancialStatus(totalIncome, totalExpenses);
 
   useEffect(() => {
     void checkAuthentication();
@@ -158,9 +209,15 @@ export default function SavingsToolsPage() {
         amount: Number(transaction?.amount ?? transaction?.valor ?? transaction?.value ?? 0),
         type: (() => {
           const rawType = String(transaction?.type ?? transaction?.tipo ?? "").toLowerCase().trim();
-          return rawType === "income" || rawType === "icome" || rawType === "receita" || rawType === "entrada"
-            ? "income"
-            : "expense";
+          if (rawType === "income" || rawType === "icome" || rawType === "receita" || rawType === "entrada") {
+            return "income";
+          }
+
+          if (rawType === "ia") {
+            return "ia";
+          }
+
+          return "expense";
         })(),
         category: String(transaction?.category ?? transaction?.categoria ?? "Sem categoria"),
         date: String(transaction?.date ?? transaction?.data ?? new Date().toISOString()),
@@ -294,6 +351,17 @@ export default function SavingsToolsPage() {
                     <Text style={styles.statLabel}>Faixa ideal de gastos</Text>
                     <Text style={styles.statValue}>{formatCurrency(expenseLimit)}</Text>
                     <Text style={styles.statHint}>Regra atual: ate 60% da receita</Text>
+                  </View>
+
+                  <View style={[styles.statCard, styles.statusCard]}>
+                    <Text style={styles.statLabel}>Status financeiro</Text>
+                    <Text style={[styles.statValue, { color: financialStatus.accent }]}>
+                      {financialStatus.label}
+                    </Text>
+                    <Text style={styles.statHint}>
+                      Gasto atual: {(financialStatus.expenseRate * 100).toFixed(1)}% da receita.
+                    </Text>
+                    <Text style={styles.statusDescription}>{financialStatus.description}</Text>
                   </View>
 
                   <View style={styles.statCard}>
@@ -469,6 +537,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 18,
   },
+  statusCard: {
+    justifyContent: "space-between",
+  },
   statLabel: {
     fontSize: 12,
     fontWeight: "700",
@@ -487,6 +558,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#748398",
     marginTop: 10,
+    lineHeight: 18,
+  },
+  statusDescription: {
+    fontSize: 12,
+    color: "#5f7087",
+    marginTop: 8,
     lineHeight: 18,
   },
   positiveValue: {

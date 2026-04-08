@@ -1,5 +1,8 @@
 import { useCallback, useState } from "react";
 import { apiService } from "@/services/api";
+import {
+  calculateMonthlyFinancialTotals,
+} from "@/lib/investments";
 import { DashboardTransaction } from "@/lib/types";
 import { toast } from "@/hooks/use-toast";
 import { useFocusEffect } from "@react-navigation/native";
@@ -12,6 +15,7 @@ type DashboardData = {
   saldo: number;
   totalReceitas: number;
   totalDespesas: number;
+  totalInvestimentos: number;
   transacoesRecentes: DashboardTransaction[];
 };
 
@@ -20,6 +24,7 @@ export function useDashboard() {
     saldo: 0,
     totalReceitas: 0,
     totalDespesas: 0,
+    totalInvestimentos: 0,
     transacoesRecentes: [],
   });
 
@@ -43,11 +48,15 @@ export function useDashboard() {
 
       const sourceForMonth = normalizedAll.length > 0 ? normalizedAll : normalizedRecent;
       const snapshot = buildMonthlyFinanceSnapshot(sourceForMonth);
+      const { totalExpense, totalInvestment, balance } = calculateMonthlyFinancialTotals(
+        snapshot.transactions,
+      );
 
       setData({
-        saldo: snapshot.balance,
+        saldo: balance,
         totalReceitas: snapshot.totalIncome,
-        totalDespesas: snapshot.totalExpenses,
+        totalDespesas: totalExpense,
+        totalInvestimentos: totalInvestment,
         transacoesRecentes: snapshot.recentTransactions,
       });
     } catch (error: any) {
@@ -71,6 +80,7 @@ export function useDashboard() {
     saldo: data.saldo,
     totalReceitas: data.totalReceitas,
     totalDespesas: data.totalDespesas,
+    totalInvestimentos: data.totalInvestimentos,
     transacoesRecentes: data.transacoesRecentes,
     loading,
     reload: loadDashboard,

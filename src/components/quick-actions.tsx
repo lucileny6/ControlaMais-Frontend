@@ -47,9 +47,9 @@ export function QuickActions() {
       ),
     },
     {
-      href: "/(tabs)/reports",
-      title: "Ver Relatorios",
-      description: "Analise seus gastos e receitas",
+      href: "/(tabs)/graphs",
+      title: "Graficos",
+      description: "Veja a evolucao de receitas, despesas, investimentos e saldo",
       icon: (
         <View style={[styles.iconBadge, styles.iconInfo]}>
           <BarChart3 size={22} color="#ffffff" strokeWidth={2.2} />

@@ -6,6 +6,7 @@ interface FinancialOverviewProps {
   saldo: number | string;
   totalReceitas: number | string;
   totalDespesas: number | string;
+  totalInvestimentos: number | string;
   loading?: boolean;
 }
 
@@ -13,6 +14,7 @@ export function FinancialOverview({
   saldo,
   totalReceitas,
   totalDespesas,
+  totalInvestimentos,
   loading = false,
 }: FinancialOverviewProps) {
   const toMoneyNumber = (value: number | string | null | undefined) => {
@@ -54,12 +56,14 @@ export function FinancialOverview({
 
   const { width } = useWindowDimensions();
   const stacked = width < 1180;
+  const gridStyle = stacked ? styles.gridStacked : styles.gridDesktop;
+  const cardStyle = stacked ? styles.cardStacked : styles.cardDesktop;
 
   if (loading) {
     return (
-      <View style={styles.grid}>
-        {[...Array(3)].map((_, i) => (
-          <Card key={i} style={[styles.card, stacked ? styles.cardStacked : styles.cardDesktop]}>
+      <View style={[styles.grid, gridStyle]}>
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} maxWidth={0} style={[styles.card, cardStyle]}>
             <CardHeader>
               <View style={[styles.skeleton, { width: 80 }]} />
             </CardHeader>
@@ -75,12 +79,13 @@ export function FinancialOverview({
 
   const income = toMoneyNumber(totalReceitas);
   const expenses = toMoneyNumber(totalDespesas);
+  const investments = toMoneyNumber(totalInvestimentos);
   const balance = toMoneyNumber(saldo);
   const expensePercentage = income > 0 ? (expenses / income) * 100 : 0;
 
   return (
-    <View style={styles.grid}>
-      <Card style={[styles.card, stacked ? styles.cardStacked : styles.cardDesktop]}>
+    <View style={[styles.grid, gridStyle]}>
+      <Card maxWidth={0} style={[styles.card, cardStyle]}>
         <CardHeader>
           <CardTitle style={styles.cardTitleStyle}>Saldo Total</CardTitle>
         </CardHeader>
@@ -94,7 +99,7 @@ export function FinancialOverview({
         </CardContent>
       </Card>
 
-      <Card style={[styles.card, stacked ? styles.cardStacked : styles.cardDesktop]}>
+      <Card maxWidth={0} style={[styles.card, cardStyle]}>
         <CardHeader>
           <CardTitle style={styles.cardTitleStyle}>Receitas</CardTitle>
         </CardHeader>
@@ -109,7 +114,7 @@ export function FinancialOverview({
         </CardContent>
       </Card>
 
-      <Card style={[styles.card, stacked ? styles.cardStacked : styles.cardDesktop]}>
+      <Card maxWidth={0} style={[styles.card, cardStyle]}>
         <CardHeader>
           <CardTitle style={styles.cardTitleStyle}>Despesas</CardTitle>
         </CardHeader>
@@ -123,6 +128,21 @@ export function FinancialOverview({
           <Text style={styles.progressText}>{expensePercentage.toFixed(1).replace(".", ",")}% da receita</Text>
         </CardContent>
       </Card>
+
+      <Card maxWidth={0} style={[styles.card, cardStyle]}>
+        <CardHeader>
+          <CardTitle style={styles.cardTitleStyle}>Investimentos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Text style={styles.amountInvestment}>
+            {investments.toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}
+          </Text>
+          <Text style={styles.subtitle}>Aportes no mes</Text>
+        </CardContent>
+      </Card>
     </View>
   );
 }
@@ -130,9 +150,14 @@ export function FinancialOverview({
 const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 16,
     marginBottom: 8,
+  },
+  gridDesktop: {
+    flexWrap: "nowrap",
+  },
+  gridStacked: {
+    flexWrap: "wrap",
   },
   card: {
     minHeight: 148,
@@ -150,9 +175,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   cardDesktop: {
-    flexBasis: "32%",
-    flexGrow: 1,
-    minWidth: 260,
+    flex: 1,
+    minWidth: 0,
   },
   cardStacked: {
     flexBasis: "100%",
@@ -182,6 +206,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "800",
     color: "#c44747",
+    letterSpacing: -0.6,
+  },
+  amountInvestment: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#2563eb",
     letterSpacing: -0.6,
   },
   subtitle: {
