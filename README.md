@@ -1,50 +1,80 @@
-# Welcome to your Expo app 👋
+# Controla - Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicação mobile/web para controle financeiro pessoal, consumindo a API do projeto Controla+.
 
-## Get started
+---
 
-1. Install dependencies
+## Tecnologias
 
-   ```bash
-   npm install
-   ```
+- React Native / Expo
+- JavaScript
+- Axios (requisições HTTP)
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## Como rodar o projeto
 
-In the output, you'll find options to open the app in a
+### Pré-requisitos
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js
+- npm ou yarn
+- Expo CLI
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
-
-When you're ready, run:
+## Instalação
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## Configuração
 
-To learn more about developing your project with Expo, look at the following resources:
+Crie um arquivo `.env` na raiz do projeto:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```env
+API_URL=http://localhost:8080
+```
 
-## Join the community
+> Para testar no celular, use o IP da sua máquina:
+>
+> Exemplo:
+>
+> API_URL=http://192.168.x.x:8080
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Rodando o projeto
+
+```bash
+npx expo start
+```
+
+---
+
+## Backend
+
+Este projeto depende do backend:
+
+https://github.com/lucileny6/ControlaMais
+
+---
+
+## Observações
+
+- O backend deve estar rodando
+- Celular e computador precisam estar na mesma rede para testes mobile
+
+---
+
+## Autora
+
+Lucileny Xavier
+
+---
+
+## Objetivo
+
+Projeto desenvolvido para prática de integração entre frontend e backend, com foco em aplicações mobile.
