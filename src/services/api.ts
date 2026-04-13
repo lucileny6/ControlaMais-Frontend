@@ -165,9 +165,8 @@ export class ApiService {
     );
   }
 
-  /* ======================
-     MÉTODO BASE (PRIVADO)
-  ====================== */
+  /* MÉTODO BASE (PRIVADO)*/
+  
   private async request<T>(
     endpoint: string,
     options: (RequestInit & { preserveSessionOnAuthError?: boolean }) = {}
@@ -243,9 +242,7 @@ export class ApiService {
     }
   }
 
-  /* ======================
-     AUTH
-  ====================== */
+  /* AUTH */
 
   async login(email: string, password: string): Promise<AuthResponse> {
     return this.request<AuthResponse>("/users/login", {
@@ -272,9 +269,7 @@ export class ApiService {
     ]);
   }
 
-  /* ======================
-     RECEITA / DESPESA
-  ====================== */
+  /* RECEITA / DESPESA */
 
   async createReceita(dto: CreateReceitaDTO) {
     console.log("[API] createReceita payload:", dto);
@@ -351,9 +346,7 @@ export class ApiService {
     throw lastError ?? new Error("Nao foi possivel excluir a transacao");
   }
 
-  /* ======================
-     DASHBOARD
-  ====================== */
+  
 
   async getDashboard(): Promise<DashboardDTO> {
     const response = await this.request<any>("/dashboard");
@@ -401,9 +394,7 @@ export class ApiService {
     };
   }
 
-  /* ======================
-     CHAT IA ✅ (AQUI ESTAVA FALTANDO)
-  ====================== */
+  
   async getTransactions(): Promise<any[]> {
     const extractList = (response: any) => {
       const payload = response?.data ?? response;

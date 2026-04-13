@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -60,6 +61,9 @@ export function TransactionList({
   onFilteredDataChange,
   onExportContextChange,
 }: TransactionListProps) {
+  const { width } = useWindowDimensions();
+  const isWebLedgerLayout = Platform.OS === "web" && width >= 768;
+
   const toMonthYear = (value: string) => {
     const raw = String(value ?? "").trim();
     if (!raw) return "";
@@ -382,8 +386,6 @@ export function TransactionList({
       </View>
     </View>
   );
-  void renderTransactionItem;
-
   const renderReportTransactionItem = ({ item }: { item: Transaction }) => (
     <View style={styles.transactionCard}>
       <View style={styles.transactionHeader}>
@@ -657,25 +659,49 @@ export function TransactionList({
       </Modal>
 
       <View style={styles.summaryContainer}>
-        <View style={[styles.summaryCard, styles.summaryIncomeCard]}>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryIncomeCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+          ]}
+        >
           <Text style={styles.summaryLabel}>Receitas</Text>
           <Text style={[styles.summaryValue, styles.incomeText]}>
             R$ {formatCurrency(totalIncome)}
           </Text>
         </View>
-        <View style={[styles.summaryCard, styles.summaryExpenseCard]}>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryExpenseCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+          ]}
+        >
           <Text style={styles.summaryLabel}>Despesas</Text>
           <Text style={[styles.summaryValue, styles.expenseText]}>
             R$ {formatCurrency(totalExpense)}
           </Text>
         </View>
-        <View style={[styles.summaryCard, styles.summaryInvestmentCard]}>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryInvestmentCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+          ]}
+        >
           <Text style={styles.summaryLabel}>Investimentos</Text>
           <Text style={[styles.summaryValue, styles.investmentText]}>
             R$ {formatCurrency(totalInvestment)}
           </Text>
         </View>
-        <View style={[styles.summaryCard, styles.summaryBalanceCard]}>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryBalanceCard,
+            !isWebLedgerLayout && styles.summaryBalanceCardCompact,
+          ]}
+        >
           <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>
             Saldo
           </Text>
@@ -693,8 +719,8 @@ export function TransactionList({
         </View>
       </View>
 
-      <View style={styles.ledgerContainer}>
-        <View style={styles.ledgerHeader}>
+      <View style={[styles.ledgerContainer, !isWebLedgerLayout && styles.ledgerContainerCompact]}>
+        <View style={[styles.ledgerHeader, !isWebLedgerLayout && styles.ledgerHeaderCompact]}>
           <View>
             <Text style={styles.ledgerTitle}>Lancamentos do periodo</Text>
             <Text style={styles.ledgerSubtitle}>
@@ -708,25 +734,27 @@ export function TransactionList({
           </View>
         </View>
 
-        <View style={styles.reportHeaderRow}>
-          <Text style={[styles.reportHeaderText, styles.dateColumn]}>Data</Text>
-          <Text style={[styles.reportHeaderText, styles.descriptionColumn]}>
-            Descricao
-          </Text>
-          <Text style={[styles.reportHeaderText, styles.typeColumn]}>Tipo</Text>
-          <Text style={[styles.reportHeaderText, styles.statusColumn]}>
-            Situacao
-          </Text>
-          <Text
-            style={[
-              styles.reportHeaderText,
-              styles.amountColumn,
-              styles.reportHeaderAmount,
-            ]}
-          >
-            Valor
-          </Text>
-        </View>
+        {isWebLedgerLayout && (
+          <View style={styles.reportHeaderRow}>
+            <Text style={[styles.reportHeaderText, styles.dateColumn]}>Data</Text>
+            <Text style={[styles.reportHeaderText, styles.descriptionColumn]}>
+              Descricao
+            </Text>
+            <Text style={[styles.reportHeaderText, styles.typeColumn]}>Tipo</Text>
+            <Text style={[styles.reportHeaderText, styles.statusColumn]}>
+              Situacao
+            </Text>
+            <Text
+              style={[
+                styles.reportHeaderText,
+                styles.amountColumn,
+                styles.reportHeaderAmount,
+              ]}
+            >
+              Valor
+            </Text>
+          </View>
+        )}
 
         {sortedFilteredTransactions.length === 0 ? (
           <View style={styles.emptyState}>
@@ -743,13 +771,16 @@ export function TransactionList({
         ) : (
           <FlatList
             data={sortedFilteredTransactions}
-            renderItem={renderReportTransactionItem}
+            renderItem={isWebLedgerLayout ? renderReportTransactionItem : renderTransactionItem}
             keyExtractor={(item, index) =>
               `${item?.id || item?.date || "tx"}-${index}`
             }
             showsVerticalScrollIndicator={false}
             style={styles.ledgerList}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              !isWebLedgerLayout && styles.listContentCompact,
+            ]}
           />
         )}
       </View>
@@ -896,6 +927,9 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingBottom: 4,
   },
+  listContentCompact: {
+    paddingBottom: 96,
+  },
   summaryContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -910,6 +944,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 42,
     justifyContent: "center",
+  },
+  summaryCardCompact: {
+    minWidth: "48%",
+    flexBasis: "48%",
   },
   summaryIncomeCard: {
     backgroundColor: "rgba(240, 253, 244, 0.92)",
@@ -927,6 +965,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderColor: "rgba(15, 23, 42, 0.12)",
     minHeight: 60,
+  },
+  summaryBalanceCardCompact: {
+    minWidth: "100%",
+    flexBasis: "100%",
   },
   summaryLabel: {
     fontSize: 9,
@@ -977,6 +1019,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
+  ledgerContainerCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
   ledgerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -986,6 +1032,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(148, 163, 184, 0.14)",
     gap: 12,
+  },
+  ledgerHeaderCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
   },
   ledgerTitle: {
     fontSize: 14,

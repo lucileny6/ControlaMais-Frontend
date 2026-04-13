@@ -14,12 +14,12 @@ export function DashboardNav() {
       icon: LayoutDashboard,
     },
     {
-      title: "Transações",
+      title: "Transa\u00e7\u00f5es",
       href: "/(tabs)/transactions",
       icon: Wallet,
     },
     {
-      title: "Graficos",
+      title: "Gr\u00e1ficos",
       href: "/(tabs)/graphs",
       icon: BarChart3,
     },
@@ -58,7 +58,9 @@ export function DashboardNav() {
             onPress={() => router.push(item.href as any)}
           >
             <Icon size={18} color={isActive ? "#1f2937" : "#7f8896"} strokeWidth={2.1} />
-            <Text style={[styles.navText, isActive ? styles.activeText : styles.inactiveText]}>{item.title}</Text>
+            <Text style={[styles.navText, isActive ? styles.activeText : styles.inactiveText]}>
+              {item.title}
+            </Text>
           </TouchableOpacity>
         );
       })}

@@ -1850,13 +1850,40 @@ export default function TransactionsPage() {
           )}
 
           <View style={styles.main}>
-            <View style={styles.scrollContent}>
-              <View style={styles.pageContent}>
-                <View style={styles.header}>
-                  <View style={styles.titleBlock}>
-                    <Text style={styles.title}>{pageTitle}</Text>
-                  </View>
-                  <View style={styles.headerActions}>
+              <View
+                style={[
+                  styles.scrollContent,
+                  !isLargeScreen && styles.scrollContentCompact,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.pageContent,
+                    !isLargeScreen && styles.pageContentCompact,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.header,
+                      !isLargeScreen && styles.headerCompact,
+                    ]}
+                  >
+                    <View style={styles.titleBlock}>
+                      <Text
+                        style={[
+                          styles.title,
+                          !isLargeScreen && styles.titleCompact,
+                        ]}
+                      >
+                        {pageTitle}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.headerActions,
+                        !isLargeScreen && styles.headerActionsCompact,
+                      ]}
+                    >
                     <TouchableOpacity
                       style={[styles.copyMonthButton, loading && styles.headerButtonDisabled]}
                       onPress={handleCopyCurrentMonth}
@@ -1882,9 +1909,8 @@ export default function TransactionsPage() {
                       <Text style={styles.exportButtonText}>Exportar PDF</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-<header></header>
-                <TransactionList
+                  </View>
+                  <TransactionList
                   transactions={transactions}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
@@ -1926,7 +1952,11 @@ export default function TransactionsPage() {
         </Modal>
 
         <TouchableOpacity
-          style={[styles.floatingButton, { bottom: Math.max(insets.bottom + 16, 20) }]}
+          style={[
+            styles.floatingButton,
+            !isLargeScreen && styles.floatingButtonCompact,
+            { bottom: Math.max(insets.bottom + 16, 20) },
+          ]}
           onPress={() => {
             setEditingTransaction(null);
             setQuickActionType(null);
@@ -2125,6 +2155,10 @@ const styles = StyleSheet.create({
     maxWidth: 1330,
     alignSelf: "center",
   },
+  scrollContentCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
   pageContent: {
     flex: 1,
     gap: 16,
@@ -2138,6 +2172,11 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 5,
+  },
+  pageContentCompact: {
+    padding: 16,
+    borderRadius: 22,
+    gap: 12,
   },
   loadingContainer: {
     flex: 1,
@@ -2159,11 +2198,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(148, 163, 184, 0.18)",
   },
+  headerCompact: {
+    flexDirection: "column",
+    gap: 14,
+  },
   title: {
     fontSize: 38,
     fontWeight: "800",
     color: "#0f172a",
     letterSpacing: -1.1,
+  },
+  titleCompact: {
+    fontSize: 28,
+    letterSpacing: -0.6,
   },
   titleBlock: {
     gap: 10,
@@ -2172,6 +2219,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
+  },
+  headerActionsCompact: {
+    width: "100%",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
   },
   headerButtonDisabled: {
     opacity: 0.6,
@@ -2246,6 +2298,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 6,
     zIndex: 20,
+  },
+  floatingButtonCompact: {
+    left: 14,
+    right: 14,
+    alignItems: "center",
   },
   floatingButtonText: {
     color: "#f8fafc",

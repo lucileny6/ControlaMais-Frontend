@@ -4,6 +4,7 @@ import {
   Text,
   TextStyle,
   TouchableOpacity,
+  View,
   ViewStyle,
 } from 'react-native';
 
@@ -27,6 +28,7 @@ interface ToggleProps {
 const mergeStyles = (base: ViewStyle, additional: ViewStyle): ViewStyle => {
   return { ...base, ...additional };
 };
+void mergeStyles;
 
 // Estilos base para as variantes
 const getToggleStyles = (
@@ -126,9 +128,9 @@ const getTextStyles = (
 
 // Componente de ícone para substituir SVG
 const IconWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{ pointerEvents: 'none', flexShrink: 0 }}>
+  <View pointerEvents="none" style={{ flexShrink: 0 }}>
     {children}
-  </div>
+  </View>
 );
 
 // Componente Toggle principal
