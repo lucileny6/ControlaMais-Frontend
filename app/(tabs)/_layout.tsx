@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { BarChart3, Bot, Goal, LayoutDashboard, Wallet } from "lucide-react-native";
+import { BarChart3, Bot, Goal, LayoutDashboard, PiggyBank, Wallet } from "lucide-react-native";
 import React from "react";
 import { useWindowDimensions } from "react-native";
 
@@ -16,7 +16,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: "#7f8896",
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: "600",
           marginTop: 2,
         },
@@ -29,7 +29,7 @@ export default function TabLayout() {
               backgroundColor: "#ffffff",
               borderTopWidth: 1,
               borderTopColor: "#e5e7eb",
-              height: 64,
+              height: 68,
               paddingTop: 6,
               paddingBottom: 6,
             },
@@ -66,6 +66,7 @@ export default function TabLayout() {
         name="goal"
         options={{
           title: "Metas",
+          href: "/(tabs)/transactions?new=1&type=expense&source=goal&category=Investimento&description=Meta%20de%20investimento",
           tabBarIcon: ({ color }) => (
             <Goal size={tabIconSize} color={color} strokeWidth={2.2} />
           ),
@@ -83,13 +84,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name="assistant-tools"
         options={{
-          href: null,
+          title: "Assistente",
+          tabBarIcon: ({ color }) => (
+            <Bot size={tabIconSize} color={color} strokeWidth={2.2} />
+          ),
         }}
       />
       <Tabs.Screen
         name="savings-tools"
         options={{
-          href: null,
+          title: "Economia",
+          tabBarIcon: ({ color }) => (
+            <PiggyBank size={tabIconSize} color={color} strokeWidth={2.2} />
+          ),
         }}
       />
     </Tabs>

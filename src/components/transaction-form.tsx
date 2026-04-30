@@ -197,7 +197,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <View style={styles.card}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Nova Transação</Text>
 
         <Text style={styles.subtitle}>
@@ -410,8 +410,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 16,
   },
+  scroll: {
+    flex: 1,
+  },
   content: {
     gap: 14,
+    paddingBottom: 24,
   },
   title: {
     fontSize: 20,

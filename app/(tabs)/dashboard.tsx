@@ -160,6 +160,7 @@ export default function PageDashboard() {
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
   const isDesktopWide = width >= 1180;
+  const isCompactScreen = width < 430;
 
   const getDisplayName = (currentUser: User | null) => {
     const resolved = resolveUserName(currentUser);
@@ -254,10 +255,10 @@ export default function PageDashboard() {
           <View style={styles.main}>
             <ScrollView
               style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, isCompactScreen && styles.scrollContentCompact]}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.dashboardContent}>
+              <View style={[styles.dashboardContent, isCompactScreen && styles.dashboardContentCompact]}>
                 <View style={styles.welcomeSection}>
                   <Text style={styles.title}>Painel</Text>
                   <Text style={styles.subtitle}>{`Bem-vindo, ${displayName}`}</Text>
@@ -323,6 +324,10 @@ const styles = StyleSheet.create({
     maxWidth: 1360,
     alignSelf: "center",
   },
+  scrollContentCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
   dashboardContent: {
     flex: 1,
     gap: 18,
@@ -336,6 +341,10 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     shadowOffset: { width: 0, height: 14 },
     elevation: 5,
+  },
+  dashboardContentCompact: {
+    borderRadius: 22,
+    padding: 14,
   },
   welcomeSection: {
     marginBottom: 2,
@@ -366,14 +375,17 @@ const styles = StyleSheet.create({
   },
   column: {
     flex: 1,
-    minWidth: 340,
+    flexBasis: "100%",
+    minWidth: 0,
   },
   transactionsWide: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
   },
   quickActionsNarrow: {
     flex: 1.2,
+    flexBasis: 0,
     minWidth: 0,
   },
   loadingContainer: {

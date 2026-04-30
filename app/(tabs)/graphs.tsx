@@ -51,6 +51,7 @@ export default function GraphsPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isCompactScreen = width < 430;
 
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -257,16 +258,16 @@ export default function GraphsPage() {
           <View style={styles.main}>
             <ScrollView
               style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, isCompactScreen && styles.scrollContentCompact]}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.pageCard}>
-                <Text style={styles.title}>Graficos Financeiros</Text>
-                <Text style={styles.subtitle}>
+              <View style={[styles.pageCard, isCompactScreen && styles.pageCardCompact]}>
+                <Text style={[styles.title, isCompactScreen && styles.titleCompact]}>Graficos Financeiros</Text>
+                <Text style={[styles.subtitle, isCompactScreen && styles.subtitleCompact]}>
                   Uma pagina separada para acompanhar os dois graficos principais sem misturar com o relatorio.
                 </Text>
 
-                <View style={styles.chartGrid}>
+                <View style={[styles.chartGrid, isCompactScreen && styles.chartGridCompact]}>
                   <IncomeExpenseChart
                     data={cumulativeChartData}
                     description={`Receita, despesa, investimento e saldo acumulados durante ${periodLabel}.`}
@@ -284,7 +285,7 @@ export default function GraphsPage() {
                               value={startDateInput}
                               onChangeText={setStartDateInput}
                               placeholder="01-04-2026"
-                              style={styles.periodInput}
+                              style={[styles.periodInput, isCompactScreen && styles.periodInputCompact]}
                             />
                           </View>
 
@@ -294,16 +295,16 @@ export default function GraphsPage() {
                               value={endDateInput}
                               onChangeText={setEndDateInput}
                               placeholder="30-04-2026"
-                              style={styles.periodInput}
+                              style={[styles.periodInput, isCompactScreen && styles.periodInputCompact]}
                             />
                           </View>
 
-                          <TouchableOpacity style={styles.periodButton} onPress={handleApplyPeriod}>
+                          <TouchableOpacity style={[styles.periodButton, isCompactScreen && styles.periodButtonCompact]} onPress={handleApplyPeriod}>
                             <Text style={styles.periodButtonText}>Aplicar</Text>
                           </TouchableOpacity>
 
                           <TouchableOpacity
-                            style={[styles.periodButton, styles.exportButton]}
+                            style={[styles.periodButton, isCompactScreen && styles.periodButtonCompact, styles.exportButton]}
                             onPress={handleExportPdf}
                           >
                             <Text style={[styles.periodButtonText, styles.exportButtonText]}>Gerar PDF</Text>
@@ -360,6 +361,10 @@ const styles = StyleSheet.create({
     maxWidth: 1380,
     alignSelf: "center",
   },
+  scrollContentCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
   pageCard: {
     backgroundColor: "rgba(255, 255, 255, 0.82)",
     borderRadius: 28,
@@ -372,11 +377,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 14 },
     elevation: 5,
   },
+  pageCardCompact: {
+    borderRadius: 20,
+    padding: 16,
+  },
   title: {
     fontSize: 34,
     fontWeight: "800",
     color: "#314d6f",
     letterSpacing: -0.8,
+  },
+  titleCompact: {
+    fontSize: 26,
+    letterSpacing: -0.4,
   },
   subtitle: {
     marginTop: 8,
@@ -384,11 +397,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6a7d96",
   },
+  subtitleCompact: {
+    marginBottom: 16,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   chartGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 18,
     alignItems: "stretch",
+  },
+  chartGridCompact: {
+    flexDirection: "column",
+    gap: 14,
   },
   periodSection: {
     gap: 12,
@@ -440,6 +462,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#0f172a",
   },
+  periodInputCompact: {
+    height: 42,
+    fontSize: 13,
+  },
   periodButton: {
     minWidth: 110,
     height: 44,
@@ -448,6 +474,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#10233f",
     paddingHorizontal: 18,
+  },
+  periodButtonCompact: {
+    minWidth: 0,
+    width: "100%",
   },
   periodButtonText: {
     fontSize: 13,

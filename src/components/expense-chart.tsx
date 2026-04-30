@@ -15,8 +15,9 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
   const hasData = expenseData.length > 0;
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isCompactScreen = width < 430;
 
-  const chartSize = isLargeScreen ? 170 : 150;
+  const chartSize = isLargeScreen ? 170 : isCompactScreen ? 128 : 150;
   const radius = chartSize * 0.4;
   const center = chartSize / 2;
 
@@ -29,7 +30,14 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
   };
 
   return (
-    <Card style={styles.card} maxWidth={isLargeScreen ? 600 : 0}>
+    <Card
+      style={[
+        styles.card,
+        isLargeScreen ? styles.cardDesktop : styles.cardMobile,
+        isCompactScreen && styles.cardCompact,
+      ]}
+      maxWidth={isLargeScreen ? 600 : 0}
+    >
       <CardHeader>
         <CardTitle>Despesas e Orcamento por Categoria</CardTitle>
         <CardDescription>Comparativo entre planejamento e gastos do mes</CardDescription>
@@ -38,7 +46,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
       <CardContent style={styles.cardContent}>
         {hasData ? (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.chartContainer}>
+            <View style={[styles.chartContainer, isCompactScreen && styles.chartContainerCompact]}>
               <Svg width={chartSize} height={chartSize} style={styles.svg}>
                 <G rotation={-90} origin={`${center}, ${center}`}>
                   {(() => {
@@ -56,7 +64,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
                           cy={center}
                           r={radius}
                           stroke={item.color}
-                          strokeWidth={isLargeScreen ? 24 : 20}
+                          strokeWidth={isLargeScreen ? 24 : isCompactScreen ? 16 : 20}
                           strokeDasharray={strokeDasharray}
                           strokeDashoffset={-currentAngle * circumference / 360}
                           fill="transparent"
@@ -70,9 +78,9 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
                 </G>
               </Svg>
 
-              <View style={[styles.centerLabel, { top: center - 20 }]}>
+              <View style={[styles.centerLabel, { top: center - (isCompactScreen ? 18 : 20) }]}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalAmount}>R$ {formatCurrency(total)}</Text>
+                <Text style={[styles.totalAmount, isCompactScreen && styles.totalAmountCompact]}>R$ {formatCurrency(total)}</Text>
               </View>
             </View>
 
@@ -81,13 +89,13 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
                 const percentage = total > 0 ? ((item.amount / total) * 100).toFixed(1) : '0.0';
 
                 return (
-                  <View key={`${item.category}-${index}`} style={styles.legendItem}>
+                  <View key={`${item.category}-${index}`} style={[styles.legendItem, isCompactScreen && styles.legendItemCompact]}>
                     <View style={styles.legendLeft}>
                       <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-                      <Text style={styles.categoryText}>{item.category}</Text>
+                      <Text style={[styles.categoryText, isCompactScreen && styles.categoryTextCompact]}>{item.category}</Text>
                     </View>
-                    <View style={styles.legendRight}>
-                      <Text style={styles.amountText}>R$ {formatCurrency(item.amount)}</Text>
+                    <View style={[styles.legendRight, isCompactScreen && styles.legendRightCompact]}>
+                      <Text style={[styles.amountText, isCompactScreen && styles.amountTextCompact]}>R$ {formatCurrency(item.amount)}</Text>
                       <Text style={styles.percentageText}>({percentage}%)</Text>
                     </View>
                   </View>
@@ -108,15 +116,30 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
 
 const styles = StyleSheet.create({
   card: {
+    minHeight: 0,
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+  },
+  cardDesktop: {
     flex: 1,
     minHeight: 430,
+  },
+  cardMobile: {
+    width: '100%',
+    alignSelf: 'stretch',
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  cardCompact: {
+    minHeight: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
   },
   cardContent: {
     flex: 1
   },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    
     paddingVertical: 4
   },
   chartContainer: {
@@ -125,6 +148,10 @@ const styles = StyleSheet.create({
     height: 200,
     marginBottom: 14,
     position: 'relative',
+  },
+  chartContainerCompact: {
+    height: 154,
+    marginBottom: 10,
   },
   svg: {
     alignSelf: 'center',
@@ -145,6 +172,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000000',
   },
+  totalAmountCompact: {
+    fontSize: 12,
+  },
   legend: {
     gap: 8,
   },
@@ -153,6 +183,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 4,
+  },
+  legendItemCompact: {
+    alignItems: 'flex-start',
+    gap: 6,
   },
   legendLeft: {
     flexDirection: 'row',
@@ -168,16 +202,29 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 13,
     color: '#000000',
+    flexShrink: 1,
+  },
+  categoryTextCompact: {
+    fontSize: 12,
   },
   legendRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginLeft: 8,
+  },
+  legendRightCompact: {
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
   },
   amountText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#000000',
+  },
+  amountTextCompact: {
+    fontSize: 12,
   },
   percentageText: {
     fontSize: 12,

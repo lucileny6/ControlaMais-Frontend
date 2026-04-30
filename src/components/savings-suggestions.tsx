@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 export interface SavingSuggestionItem {
   title: string;
@@ -27,6 +27,9 @@ export function SavingsSuggestions({
   expenseLimit,
   loading = false,
 }: SavingsSuggestionsProps) {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 640;
+
   const getDifficultyColor = (difficulty: SavingSuggestionItem["difficulty"]) => {
     switch (difficulty) {
       case "easy":
@@ -89,7 +92,7 @@ export function SavingsSuggestions({
           <View style={styles.suggestionsContainer}>
             {suggestions.map((suggestion, index) => (
               <View key={`${suggestion.title}-${suggestion.reductionTarget}-${index}`} style={styles.suggestionItem}>
-                <View style={styles.suggestionHeader}>
+                <View style={[styles.suggestionHeader, isCompact && styles.suggestionHeaderCompact]}>
                   <View style={styles.suggestionInfo}>
                     <View style={styles.badgeContainer}>
                       <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
@@ -105,7 +108,7 @@ export function SavingsSuggestions({
                     <Text style={styles.suggestionDescription}>{suggestion.description}</Text>
                   </View>
 
-                  <View style={styles.savingsContainer}>
+                  <View style={[styles.savingsContainer, isCompact && styles.savingsContainerCompact]}>
                     <Text style={styles.savingsAmount}>{formatCurrency(suggestion.potentialSavings)}</Text>
                     <Text style={styles.savingsPeriod}>economia estimada</Text>
                   </View>
@@ -207,8 +210,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 16,
   },
+  suggestionHeaderCompact: {
+    flexDirection: "column",
+    gap: 12,
+  },
   suggestionInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 8,
   },
   badgeContainer: {
@@ -218,6 +226,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#10233f",
+    lineHeight: 21,
   },
   badgesRow: {
     flexDirection: "row",
@@ -266,12 +275,22 @@ const styles = StyleSheet.create({
   },
   savingsContainer: {
     alignItems: "flex-end",
-    minWidth: 130,
+    flexShrink: 0,
+    minWidth: 138,
+  },
+  savingsContainerCompact: {
+    alignItems: "flex-start",
+    width: "100%",
+    minWidth: 0,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(203, 213, 225, 0.46)",
   },
   savingsAmount: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0d8a67",
+    lineHeight: 24,
   },
   savingsPeriod: {
     fontSize: 12,

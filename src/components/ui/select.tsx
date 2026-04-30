@@ -149,6 +149,7 @@ const SelectTrigger = React.forwardRef<View, SelectTriggerProps>(
     );
   }
 );
+SelectTrigger.displayName = "SelectTrigger";
 
 // Value Component
 function SelectValue({

@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { AIResponse, LoginResponse, User as AuthUser } from "@/lib/types";
 
 
@@ -654,6 +655,17 @@ export class ApiService {
 export const apiService = new ApiService();
 
 function resolveApiBaseUrl() {
+  const webBaseUrl =
+    process.env.EXPO_PUBLIC_API_URL_WEB ??
+    process.env.EXPO_PUBLIC_WEB_API_URL;
+
+  if (Platform.OS === "web" && webBaseUrl?.trim()) {
+    const normalizedWebBaseUrl = webBaseUrl.trim().replace(/\/+$/, "");
+    return /\/api$/i.test(normalizedWebBaseUrl)
+      ? normalizedWebBaseUrl
+      : `${normalizedWebBaseUrl}/api`;
+  }
+
   const configuredBaseUrl =
     process.env.EXPO_PUBLIC_API_URL ??
     process.env.EXPO_PUBLIC_BACKEND_API_URL ??
@@ -681,4 +693,3 @@ function normalizeEndpointPath(endpoint: string | undefined) {
 
   return normalizedEndpoint.startsWith("/") ? normalizedEndpoint : `/${normalizedEndpoint}`;
 }
-

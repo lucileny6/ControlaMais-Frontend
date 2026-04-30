@@ -55,9 +55,11 @@ export function FinancialOverview({
   };
 
   const { width } = useWindowDimensions();
+  const compact = width < 430;
   const stacked = width < 1180;
   const gridStyle = stacked ? styles.gridStacked : styles.gridDesktop;
   const cardStyle = stacked ? styles.cardStacked : styles.cardDesktop;
+  const amountStyle = compact ? styles.amountCompact : undefined;
 
   if (loading) {
     return (
@@ -90,7 +92,7 @@ export function FinancialOverview({
           <CardTitle style={styles.cardTitleStyle}>Saldo Total</CardTitle>
         </CardHeader>
         <CardContent>
-          <Text style={styles.amountPrimary}>
+          <Text style={[styles.amountPrimary, amountStyle]}>
             {balance.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -104,7 +106,7 @@ export function FinancialOverview({
           <CardTitle style={styles.cardTitleStyle}>Receitas</CardTitle>
         </CardHeader>
         <CardContent>
-          <Text style={styles.amountIncome}>
+          <Text style={[styles.amountIncome, amountStyle]}>
             {income.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -119,7 +121,7 @@ export function FinancialOverview({
           <CardTitle style={styles.cardTitleStyle}>Despesas</CardTitle>
         </CardHeader>
         <CardContent>
-          <Text style={styles.amountExpense}>
+          <Text style={[styles.amountExpense, amountStyle]}>
             {expenses.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -134,7 +136,7 @@ export function FinancialOverview({
           <CardTitle style={styles.cardTitleStyle}>Investimentos</CardTitle>
         </CardHeader>
         <CardContent>
-          <Text style={styles.amountInvestment}>
+          <Text style={[styles.amountInvestment, amountStyle]}>
             {investments.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -213,6 +215,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#2563eb",
     letterSpacing: -0.6,
+  },
+  amountCompact: {
+    fontSize: 26,
   },
   subtitle: {
     fontSize: 12,

@@ -9,7 +9,7 @@ interface RecentTransactionsProps {
 
 export function RecentTransactions({ transactions }: RecentTransactionsProps) {
   return (
-    <Card style={styles.card}>
+    <Card maxWidth={0} style={styles.card}>
       <CardHeader>
         <CardTitle style={styles.title}>Transacoes Recentes</CardTitle>
       </CardHeader>
@@ -43,6 +43,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
 
 const styles = StyleSheet.create({
   card: {
+    width: "100%",
     borderRadius: 26,
     borderWidth: 1,
     borderColor: "rgba(197, 210, 223, 0.42)",
@@ -65,18 +66,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
     paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: "rgba(203, 213, 225, 0.38)",
   },
   leftBlock: {
+    flex: 1,
+    minWidth: 0,
     gap: 4,
-    paddingRight: 16,
   },
   description: {
     fontSize: 14,
     fontWeight: "700",
     color: "#11243f",
+    flexShrink: 1,
   },
   category: {
     fontSize: 12,
@@ -87,11 +91,15 @@ const styles = StyleSheet.create({
     color: "#0d8a67",
     fontWeight: "800",
     fontSize: 14,
+    flexShrink: 0,
+    textAlign: "right",
   },
   expense: {
     color: "#c44747",
     fontWeight: "800",
     fontSize: 14,
+    flexShrink: 0,
+    textAlign: "right",
   },
   empty: {
     textAlign: "center",

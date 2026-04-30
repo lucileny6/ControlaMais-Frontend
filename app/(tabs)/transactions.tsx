@@ -8,16 +8,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -146,6 +146,10 @@ export default function TransactionsPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isCompactScreen = width < 430;
+  const floatingButtonBottom = isLargeScreen
+    ? Math.max(insets.bottom + 16, 20)
+    : Math.max(insets.bottom + 84, 88);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [exportContext, setExportContext] = useState<ExportContext>({
@@ -401,6 +405,19 @@ export default function TransactionsPage() {
     !editingTransaction && prefilledTransaction?.category === "Investimento"
       ? "Nova Meta de Investimento"
       : modalTitle;
+
+  const openNewTransaction = () => {
+    setPeriodPromptOpen(false);
+    setDeleteMonthPromptOpen(false);
+    setYearSelectOpen(false);
+    setEditingTransaction(null);
+    setQuickActionType("expense");
+    setPrefilledTransaction({ type: "expense" });
+    setOpenedFromDashboard(false);
+    setModalOpen(true);
+    router.push("/(tabs)/transactions?new=1&type=expense&source=transactions" as any);
+  };
+
   const transactionFormInitialData: Partial<TransactionFormData> | undefined =
     editingTransaction && editingTransaction.type !== "ia"
       ? {
@@ -1849,79 +1866,78 @@ export default function TransactionsPage() {
             </View>
           )}
 
-          <View style={styles.main}>
-              <View
-                style={[
-                  styles.scrollContent,
-                  !isLargeScreen && styles.scrollContentCompact,
-                ]}
-              >
-                <View
+          <View style={[styles.main, { flex: 1, paddingHorizontal: 28, paddingVertical: 24 }]}>
+            {/* Header acima da lista */}
+            <View
+              style={[
+                styles.header,
+                !isLargeScreen && styles.headerCompact,
+                { marginBottom: 16 }
+              ]}
+            >
+              <View style={styles.titleBlock}>
+                <Text
                   style={[
-                    styles.pageContent,
-                    !isLargeScreen && styles.pageContentCompact,
+                    styles.title,
+                    !isLargeScreen && styles.titleCompact,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.header,
-                      !isLargeScreen && styles.headerCompact,
-                    ]}
-                  >
-                    <View style={styles.titleBlock}>
-                      <Text
-                        style={[
-                          styles.title,
-                          !isLargeScreen && styles.titleCompact,
-                        ]}
-                      >
-                        {pageTitle}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.headerActions,
-                        !isLargeScreen && styles.headerActionsCompact,
-                      ]}
-                    >
-                    <TouchableOpacity
-                      style={[styles.copyMonthButton, loading && styles.headerButtonDisabled]}
-                      onPress={handleCopyCurrentMonth}
-                      disabled={loading}
-                    >
-                      <Text style={styles.copyMonthButtonText}>Copiar mês</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.deleteMonthButton,
-                        (!initialPeriod.startDate || loading) && styles.headerButtonDisabled,
-                      ]}
-                      onPress={handleDeleteMonth}
-                      disabled={!initialPeriod.startDate || loading}
-                    >
-                      <Text style={styles.deleteMonthButtonText}>Excluir mês</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.exportButton, loading && styles.headerButtonDisabled]}
-                      onPress={handleExportPdf}
-                      disabled={loading}
-                    >
-                      <Text style={styles.exportButtonText}>Exportar PDF</Text>
-                    </TouchableOpacity>
-                  </View>
-                  </View>
-                  <TransactionList
-                  transactions={transactions}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  initialStartDate={initialPeriod.startDate}
-                  initialEndDate={initialPeriod.endDate}
-                  periodSyncToken={periodSyncToken}
-                  periodLabel={selectedMonthLabel}
-                  onOpenPeriodPicker={openPeriodPrompt}
-                  onExportContextChange={setExportContext}
-                />
+                  {pageTitle}
+                </Text>
               </View>
+              <View
+                style={[
+                  styles.headerActions,
+                  !isLargeScreen && styles.headerActionsCompact,
+                ]}
+              >
+              <TouchableOpacity
+                style={[styles.copyMonthButton, loading && styles.headerButtonDisabled]}
+                onPress={handleCopyCurrentMonth}
+                disabled={loading}
+              >
+                <Text style={styles.copyMonthButtonText}>Copiar mês</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.deleteMonthButton,
+                  (!initialPeriod.startDate || loading) && styles.headerButtonDisabled,
+                ]}
+                onPress={handleDeleteMonth}
+                disabled={!initialPeriod.startDate || loading}
+              >
+                <Text style={styles.deleteMonthButtonText}>Excluir mês</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exportButton, loading && styles.headerButtonDisabled]}
+                onPress={handleExportPdf}
+                disabled={loading}
+              >
+                <Text style={styles.exportButtonText}>Exportar PDF</Text>
+              </TouchableOpacity>
+            </View>
+            </View>
+
+            {/* TransactionList com wrapper de estilos */}
+            <View
+              style={[
+                styles.pageContent,
+                !isLargeScreen && styles.pageContentCompact,
+                isCompactScreen && styles.pageContentPhone,
+                { flex: 1 }
+              ]}
+            >
+              <TransactionList
+                transactions={transactions}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                initialStartDate={initialPeriod.startDate}
+                initialEndDate={initialPeriod.endDate}
+                periodSyncToken={periodSyncToken}
+                periodLabel={selectedMonthLabel}
+                onOpenPeriodPicker={openPeriodPrompt}
+                onExportContextChange={setExportContext}
+              />
             </View>
           </View>
         </View>
@@ -1951,22 +1967,17 @@ export default function TransactionsPage() {
           </View>
         </Modal>
 
-        <TouchableOpacity
+        <Pressable
           style={[
             styles.floatingButton,
             !isLargeScreen && styles.floatingButtonCompact,
-            { bottom: Math.max(insets.bottom + 16, 20) },
+            { bottom: floatingButtonBottom },
           ]}
-          onPress={() => {
-            setEditingTransaction(null);
-            setQuickActionType(null);
-            setPrefilledTransaction(null);
-            setOpenedFromDashboard(false);
-            setModalOpen(true);
-          }}
+          onPress={openNewTransaction}
+          hitSlop={10}
         >
           <Text style={styles.floatingButtonText}>+ Nova Transação</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         <Modal visible={periodPromptOpen} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
@@ -2147,8 +2158,11 @@ const styles = StyleSheet.create({
   main: {
     flex: 1,
   },
-  scrollContent: {
+  scrollFrame: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 28,
     paddingVertical: 24,
     width: "100%",
@@ -2158,6 +2172,10 @@ const styles = StyleSheet.create({
   scrollContentCompact: {
     paddingHorizontal: 14,
     paddingVertical: 14,
+    paddingBottom: 124,
+  },
+  scrollContentPhone: {
+    paddingHorizontal: 12,
   },
   pageContent: {
     flex: 1,
@@ -2177,6 +2195,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 22,
     gap: 12,
+  },
+  pageContentPhone: {
+    padding: 12,
   },
   loadingContainer: {
     flex: 1,
@@ -2235,6 +2256,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(59, 130, 246, 0.28)",
+    flexGrow: 1,
+    alignItems: "center",
   },
   copyMonthButtonText: {
     color: "#1d4ed8",
@@ -2248,6 +2271,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(220, 38, 38, 0.24)",
+    flexGrow: 1,
+    alignItems: "center",
   },
   deleteMonthButtonText: {
     color: "#b91c1c",
@@ -2264,6 +2289,8 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+    flexGrow: 1,
+    alignItems: "center",
   },
   exportButtonText: {
     color: "#f8fafc",
@@ -2297,7 +2324,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 6,
-    zIndex: 20,
+    zIndex: 100,
   },
   floatingButtonCompact: {
     left: 14,
@@ -2322,6 +2349,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "100%",
     maxWidth: 650,
+    height: "88%",
     maxHeight: "88%",
     borderRadius: 24,
     overflow: "hidden",
@@ -2467,7 +2495,7 @@ const styles = StyleSheet.create({
   },
   periodMonthChip: {
     width: "31%",
-    minWidth: 96,
+    minWidth: 0,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.24)",

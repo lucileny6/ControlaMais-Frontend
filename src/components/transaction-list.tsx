@@ -2,7 +2,7 @@
   calculateMonthlyFinancialTotals,
   isInvestmentCategory,
 } from "@/lib/investments";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -63,6 +63,7 @@ export function TransactionList({
 }: TransactionListProps) {
   const { width } = useWindowDimensions();
   const isWebLedgerLayout = Platform.OS === "web" && width >= 768;
+  const isCompactScreen = width < 430;
 
   const toMonthYear = (value: string) => {
     const raw = String(value ?? "").trim();
@@ -93,14 +94,14 @@ export function TransactionList({
     setStartDate(toMonthYear(initialStartDate));
     setEndDate(toMonthYear(initialEndDate));
   }, [initialStartDate, initialEndDate, periodSyncToken]);
-  const normalizeCategory = (value: string) =>
+  const normalizeCategory = useCallback((value: string) =>
     value
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
-      .toLowerCase();
+      .toLowerCase(), []);
 
-  const parseDateValue = (value: string, endOfMonth = false) => {
+  const parseDateValue = useCallback((value: string, endOfMonth = false) => {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
 
@@ -142,58 +143,71 @@ export function TransactionList({
 
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed;
-  };
+  }, []);
 
-  const filteredTransactions = transactions.filter((transaction) => {
-    const type = transaction?.type ?? "expense";
-    const category = String(transaction?.category ?? "");
-    const matchesType = filterType === "all" || type === filterType;
-    const matchesRecurrence =
-      filterRecurrence === "all" ||
-      (filterRecurrence === "recurring" ? Boolean(transaction?.recorrente) : !transaction?.recorrente);
-    const matchesCategory =
-      filterCategory === "all" ||
-      normalizeCategory(category) === normalizeCategory(filterCategory);
-    const transactionDate = parseDateValue(String(transaction?.date ?? ""));
-    const start = parseDateValue(startDate, false);
-    const end = parseDateValue(endDate, true);
-    if (start) start.setHours(0, 0, 0, 0);
-    if (end) end.setHours(23, 59, 59, 999);
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const type = transaction?.type ?? "expense";
+      const category = String(transaction?.category ?? "");
+      const matchesType = filterType === "all" || type === filterType;
+      const matchesRecurrence =
+        filterRecurrence === "all" ||
+        (filterRecurrence === "recurring" ? Boolean(transaction?.recorrente) : !transaction?.recorrente);
+      const matchesCategory =
+        filterCategory === "all" ||
+        normalizeCategory(category) === normalizeCategory(filterCategory);
+      const transactionDate = parseDateValue(String(transaction?.date ?? ""));
+      const start = parseDateValue(startDate, false);
+      const end = parseDateValue(endDate, true);
+      if (start) start.setHours(0, 0, 0, 0);
+      if (end) end.setHours(23, 59, 59, 999);
 
-    const hasOnlyStart = Boolean(start) && !end;
-    const hasOnlyEnd = !start && Boolean(end);
+      const hasOnlyStart = Boolean(start) && !end;
+      const hasOnlyEnd = !start && Boolean(end);
 
-    const matchesDate = (() => {
-      if (!start && !end) return true;
-      if (!transactionDate) return false;
-      const current = new Date(transactionDate);
-      current.setHours(12, 0, 0, 0);
+      const matchesDate = (() => {
+        if (!start && !end) return true;
+        if (!transactionDate) return false;
+        const current = new Date(transactionDate);
+        current.setHours(12, 0, 0, 0);
 
-      if (hasOnlyStart) {
-        const target = new Date(start!);
-        target.setHours(12, 0, 0, 0);
-        return current.getTime() === target.getTime();
-      }
+        if (hasOnlyStart) {
+          const target = new Date(start!);
+          target.setHours(12, 0, 0, 0);
+          return current.getTime() === target.getTime();
+        }
 
-      if (hasOnlyEnd) {
-        const target = new Date(end!);
-        target.setHours(12, 0, 0, 0);
-        return current.getTime() === target.getTime();
-      }
+        if (hasOnlyEnd) {
+          const target = new Date(end!);
+          target.setHours(12, 0, 0, 0);
+          return current.getTime() === target.getTime();
+        }
 
-      const matchesStartDate = !start || current >= start;
-      const matchesEndDate = !end || current <= end;
-      return matchesStartDate && matchesEndDate;
-    })();
+        const matchesStartDate = !start || current >= start;
+        const matchesEndDate = !end || current <= end;
+        return matchesStartDate && matchesEndDate;
+      })();
 
-    return matchesType && matchesRecurrence && matchesCategory && matchesDate;
-  });
+      return matchesType && matchesRecurrence && matchesCategory && matchesDate;
+    });
+  }, [
+    transactions,
+    filterType,
+    filterRecurrence,
+    filterCategory,
+    startDate,
+    endDate,
+    normalizeCategory,
+    parseDateValue,
+  ]);
 
-  const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
-    const aTime = parseDateValue(String(a?.date ?? ""))?.getTime() ?? 0;
-    const bTime = parseDateValue(String(b?.date ?? ""))?.getTime() ?? 0;
-    return bTime - aTime;
-  });
+  const sortedFilteredTransactions = useMemo(() => {
+    return [...filteredTransactions].sort((a, b) => {
+      const aTime = parseDateValue(String(a?.date ?? ""))?.getTime() ?? 0;
+      const bTime = parseDateValue(String(b?.date ?? ""))?.getTime() ?? 0;
+      return bTime - aTime;
+    });
+  }, [filteredTransactions, parseDateValue]);
 
   const { totalIncome, totalExpense, totalInvestment, balance } =
     calculateMonthlyFinancialTotals(filteredTransactions);
@@ -222,18 +236,22 @@ export function TransactionList({
     onExportContextChange,
   ]);
 
-  const categories = Array.from(
-    transactions.reduce((acc, transaction) => {
-      const rawCategory = String(transaction?.category ?? "").trim();
-      if (!rawCategory) return acc;
+  const categories = useMemo(
+    () =>
+      Array.from(
+        transactions.reduce((acc, transaction) => {
+          const rawCategory = String(transaction?.category ?? "").trim();
+          if (!rawCategory) return acc;
 
-      const normalizedKey = normalizeCategory(rawCategory);
-      if (!acc.has(normalizedKey)) {
-        acc.set(normalizedKey, rawCategory);
-      }
+          const normalizedKey = normalizeCategory(rawCategory);
+          if (!acc.has(normalizedKey)) {
+            acc.set(normalizedKey, rawCategory);
+          }
 
-      return acc;
-    }, new Map<string, string>()).values(),
+          return acc;
+        }, new Map<string, string>()).values(),
+      ),
+    [transactions, normalizeCategory],
   );
 
   const clearFilters = () => {
@@ -344,7 +362,7 @@ export function TransactionList({
                 getTransactionDotStyle(item),
               ]}
             />
-            <Text style={styles.description}>{item.description}</Text>
+            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
           </View>
 
           <View style={styles.metaRow}>
@@ -357,6 +375,7 @@ export function TransactionList({
           <Text
             style={[
               styles.amount,
+              isCompactScreen && styles.amountCompact,
               getTransactionAmountStyle(item),
             ]}
           >
@@ -401,7 +420,7 @@ export function TransactionList({
                 getTransactionDotStyle(item),
               ]}
             />
-            <Text style={styles.description}>{item.description}</Text>
+            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
           </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>{item.category}</Text>
@@ -428,6 +447,7 @@ export function TransactionList({
           <Text
             style={[
               styles.amount,
+              isCompactScreen && styles.amountCompact,
               getTransactionAmountStyle(item),
             ]}
           >
@@ -457,14 +477,16 @@ export function TransactionList({
     </View>
   );
 
-  return (
-    <View style={styles.container}>
+  // Componente para o header do FlatList (filtros e resumo)
+  const renderListHeader = () => (
+    <>
       {/* Filtros */}
       <View style={styles.filtersContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.toolbarRow}
+          scrollEnabled={true}
         >
           <View style={styles.toolbarItem}>
             <Text style={styles.toolbarLabel}>Período</Text>
@@ -610,6 +632,116 @@ export function TransactionList({
         </ScrollView>
       </View>
 
+      <View style={styles.summaryContainer}>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryIncomeCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+            isCompactScreen && styles.summaryCardPhone,
+          ]}
+        >
+          <Text style={styles.summaryLabel}>Receitas</Text>
+          <Text style={[styles.summaryValue, isCompactScreen && styles.summaryValueCompact, styles.incomeText]}>
+            R$ {formatCurrency(totalIncome)}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryExpenseCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+            isCompactScreen && styles.summaryCardPhone,
+          ]}
+        >
+          <Text style={styles.summaryLabel}>Despesas</Text>
+          <Text style={[styles.summaryValue, isCompactScreen && styles.summaryValueCompact, styles.expenseText]}>
+            R$ {formatCurrency(totalExpense)}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryInvestmentCard,
+            !isWebLedgerLayout && styles.summaryCardCompact,
+            isCompactScreen && styles.summaryCardPhone,
+          ]}
+        >
+          <Text style={styles.summaryLabel}>Investimentos</Text>
+          <Text style={[styles.summaryValue, isCompactScreen && styles.summaryValueCompact, styles.investmentText]}>
+            R$ {formatCurrency(totalInvestment)}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.summaryCard,
+            styles.summaryBalanceCard,
+            !isWebLedgerLayout && styles.summaryBalanceCardCompact,
+          ]}
+        >
+          <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>
+            Saldo
+          </Text>
+          <Text
+            style={[
+              styles.summaryValue,
+              isCompactScreen && styles.summaryValueCompact,
+              styles.summaryBalanceValue,
+              balance >= 0
+                ? styles.summaryBalancePositive
+                : styles.summaryBalanceNegative,
+            ]}
+          >
+            {formatBalanceValue(balance)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Header Info */}
+      <View style={[styles.ledgerContainer, !isWebLedgerLayout && styles.ledgerContainerCompact, isCompactScreen && styles.ledgerContainerPhone]}>
+        <View style={[styles.ledgerHeader, !isWebLedgerLayout && styles.ledgerHeaderCompact]}>
+          <View>
+            <Text style={styles.ledgerTitle}>Lancamentos do periodo</Text>
+            <Text style={styles.ledgerSubtitle}>
+              Visualize receitas e despesas do mes em formato de extrato.
+            </Text>
+          </View>
+          <View style={styles.ledgerBadge}>
+            <Text style={styles.ledgerBadgeText}>
+              {sortedFilteredTransactions.length} itens
+            </Text>
+          </View>
+        </View>
+
+        {isWebLedgerLayout && (
+          <View style={styles.reportHeaderRow}>
+            <Text style={[styles.reportHeaderText, styles.dateColumn]}>Data</Text>
+            <Text style={[styles.reportHeaderText, styles.descriptionColumn]}>
+              Descricao
+            </Text>
+            <Text style={[styles.reportHeaderText, styles.typeColumn]}>Tipo</Text>
+            <Text style={[styles.reportHeaderText, styles.statusColumn]}>
+              Situacao
+            </Text>
+            <Text
+              style={[
+                styles.reportHeaderText,
+                styles.amountColumn,
+                styles.reportHeaderAmount,
+              ]}
+            >
+              Valor
+            </Text>
+          </View>
+        )}
+      </View>
+    </>
+  );
+
+
+  return (
+    <>
+      {/* Modals ficam fora do FlatList */}
       <Modal
         visible={categoryPickerOpen}
         transparent
@@ -658,105 +790,21 @@ export function TransactionList({
         </View>
       </Modal>
 
-      <View style={styles.summaryContainer}>
-        <View
-          style={[
-            styles.summaryCard,
-            styles.summaryIncomeCard,
-            !isWebLedgerLayout && styles.summaryCardCompact,
-          ]}
-        >
-          <Text style={styles.summaryLabel}>Receitas</Text>
-          <Text style={[styles.summaryValue, styles.incomeText]}>
-            R$ {formatCurrency(totalIncome)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.summaryCard,
-            styles.summaryExpenseCard,
-            !isWebLedgerLayout && styles.summaryCardCompact,
-          ]}
-        >
-          <Text style={styles.summaryLabel}>Despesas</Text>
-          <Text style={[styles.summaryValue, styles.expenseText]}>
-            R$ {formatCurrency(totalExpense)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.summaryCard,
-            styles.summaryInvestmentCard,
-            !isWebLedgerLayout && styles.summaryCardCompact,
-          ]}
-        >
-          <Text style={styles.summaryLabel}>Investimentos</Text>
-          <Text style={[styles.summaryValue, styles.investmentText]}>
-            R$ {formatCurrency(totalInvestment)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.summaryCard,
-            styles.summaryBalanceCard,
-            !isWebLedgerLayout && styles.summaryBalanceCardCompact,
-          ]}
-        >
-          <Text style={[styles.summaryLabel, styles.summaryBalanceLabel]}>
-            Saldo
-          </Text>
-          <Text
-            style={[
-              styles.summaryValue,
-              styles.summaryBalanceValue,
-              balance >= 0
-                ? styles.summaryBalancePositive
-                : styles.summaryBalanceNegative,
-            ]}
-          >
-            {formatBalanceValue(balance)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={[styles.ledgerContainer, !isWebLedgerLayout && styles.ledgerContainerCompact]}>
-        <View style={[styles.ledgerHeader, !isWebLedgerLayout && styles.ledgerHeaderCompact]}>
-          <View>
-            <Text style={styles.ledgerTitle}>Lancamentos do periodo</Text>
-            <Text style={styles.ledgerSubtitle}>
-              Visualize receitas e despesas do mes em formato de extrato.
-            </Text>
-          </View>
-          <View style={styles.ledgerBadge}>
-            <Text style={styles.ledgerBadgeText}>
-              {sortedFilteredTransactions.length} itens
-            </Text>
-          </View>
-        </View>
-
-        {isWebLedgerLayout && (
-          <View style={styles.reportHeaderRow}>
-            <Text style={[styles.reportHeaderText, styles.dateColumn]}>Data</Text>
-            <Text style={[styles.reportHeaderText, styles.descriptionColumn]}>
-              Descricao
-            </Text>
-            <Text style={[styles.reportHeaderText, styles.typeColumn]}>Tipo</Text>
-            <Text style={[styles.reportHeaderText, styles.statusColumn]}>
-              Situacao
-            </Text>
-            <Text
-              style={[
-                styles.reportHeaderText,
-                styles.amountColumn,
-                styles.reportHeaderAmount,
-              ]}
-            >
-              Valor
-            </Text>
-          </View>
-        )}
-
-        {sortedFilteredTransactions.length === 0 ? (
+      {/* FlatList como container principal */}
+      <FlatList
+        ListHeaderComponent={renderListHeader}
+        data={sortedFilteredTransactions}
+        renderItem={isWebLedgerLayout ? renderReportTransactionItem : renderTransactionItem}
+        keyExtractor={(item, index) =>
+          `${item?.id || item?.date || "tx"}-${index}`
+        }
+        showsVerticalScrollIndicator={false}
+        style={[styles.ledgerList, !isWebLedgerLayout && styles.ledgerListCompact]}
+        contentContainerStyle={[
+          styles.listContent,
+          !isWebLedgerLayout && styles.listContentCompact,
+        ]}
+        ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyStateIcon}>
               <Text style={styles.emptyStateIconMark}>-</Text>
@@ -768,30 +816,18 @@ export function TransactionList({
               Ajuste os filtros ou troque o periodo para visualizar lancamentos.
             </Text>
           </View>
-        ) : (
-          <FlatList
-            data={sortedFilteredTransactions}
-            renderItem={isWebLedgerLayout ? renderReportTransactionItem : renderTransactionItem}
-            keyExtractor={(item, index) =>
-              `${item?.id || item?.date || "tx"}-${index}`
-            }
-            showsVerticalScrollIndicator={false}
-            style={styles.ledgerList}
-            contentContainerStyle={[
-              styles.listContent,
-              !isWebLedgerLayout && styles.listContentCompact,
-            ]}
-          />
-        )}
-      </View>
-    </View>
+        }
+      />
+    </>
   );
 
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minWidth: 0,
   },
   filtersContainer: {
     gap: 4,
@@ -946,8 +982,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   summaryCardCompact: {
-    minWidth: "48%",
     flexBasis: "48%",
+    minWidth: 0,
+  },
+  summaryCardPhone: {
+    flexBasis: "100%",
   },
   summaryIncomeCard: {
     backgroundColor: "rgba(240, 253, 244, 0.92)",
@@ -982,6 +1021,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#111111",
+  },
+  summaryValueCompact: {
+    fontSize: 13,
   },
   summaryBalanceLabel: {
     color: "#64748b",
@@ -1023,6 +1065,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
+  ledgerContainerPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
   ledgerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1046,6 +1092,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#64748b",
     marginTop: 2,
+    flexShrink: 1,
   },
   ledgerBadge: {
     backgroundColor: "#f8fafc",
@@ -1143,6 +1190,9 @@ const styles = StyleSheet.create({
   ledgerList: {
     maxHeight: 760,
   },
+  ledgerListCompact: {
+    maxHeight: 520,
+  },
   reportCell: {
     justifyContent: "center",
   },
@@ -1176,12 +1226,14 @@ const styles = StyleSheet.create({
   },
   transactionInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   headlineRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    minWidth: 0,
   },
   typeDot: {
     width: 6,
@@ -1201,6 +1253,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#0f172a",
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   metaRow: {
     marginTop: 4,
@@ -1209,13 +1264,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#64748b",
     fontWeight: "500",
+    flexShrink: 1,
   },
   amountContainer: {
     alignItems: "flex-end",
+    flexShrink: 0,
   },
   amount: {
     fontSize: 14,
     fontWeight: "700",
+    textAlign: "right",
+  },
+  amountCompact: {
+    fontSize: 13,
   },
   incomeAmount: {
     color: "#16a34a", // green-600
