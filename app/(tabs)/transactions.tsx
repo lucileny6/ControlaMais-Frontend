@@ -146,6 +146,7 @@ export default function TransactionsPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isMobileApp = Platform.OS !== "web";
   const isCompactScreen = width < 430;
   const floatingButtonBottom = isLargeScreen
     ? Math.max(insets.bottom + 16, 20)
@@ -1970,7 +1971,7 @@ export default function TransactionsPage() {
         <Pressable
           style={[
             styles.floatingButton,
-            !isLargeScreen && styles.floatingButtonCompact,
+            !isLargeScreen && isMobileApp && styles.floatingButtonCompact,
             { bottom: floatingButtonBottom },
           ]}
           onPress={openNewTransaction}
@@ -2327,8 +2328,10 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   floatingButtonCompact: {
-    left: 14,
-    right: 14,
+    right: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    minWidth: 162,
     alignItems: "center",
   },
   floatingButtonText: {

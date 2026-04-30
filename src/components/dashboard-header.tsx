@@ -182,8 +182,8 @@ export function DashboardHeader() {
   };
 
   const menuItems = [
-    { label: "Configuracoes", onPress: () => console.log("Configuracoes") },
-    { label: "Ajuda", onPress: () => console.log("Ajuda") },
+    { label: "Configuracoes", onPress: () => router.push("/settings") },
+    { label: "Ajuda", onPress: () => router.push("/help") },
     {
       label: "Sair",
       onPress: async () => {

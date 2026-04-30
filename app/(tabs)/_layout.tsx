@@ -1,11 +1,12 @@
 import { Tabs } from "expo-router";
 import { BarChart3, Bot, Goal, LayoutDashboard, PiggyBank, Wallet } from "lucide-react-native";
 import React from "react";
-import { useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 
 export default function TabLayout() {
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
+  const isMobileApp = Platform.OS !== "web";
   const tabIconSize = 19;
 
   return (
@@ -56,7 +57,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "IA",
+          title: isMobileApp ? "Chat IA" : "IA",
           tabBarIcon: ({ color }) => (
             <Bot size={tabIconSize} color={color} strokeWidth={2.2} />
           ),
