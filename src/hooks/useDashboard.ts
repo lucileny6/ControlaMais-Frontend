@@ -36,7 +36,7 @@ export function useDashboard() {
 
       const [dashboardResponse, transactionsResponse] = await Promise.all([
         apiService.getDashboard(),
-        apiService.getTransactions().catch(() => []),
+        apiService.getTransactions({ preserveSessionOnAuthError: true }).catch(() => []),
       ]);
 
       const normalizedAll = (transactionsResponse ?? []).map((transaction: any, index: number) =>

@@ -3,12 +3,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   ArrowLeft,
+  CheckCircle2,
   Eye,
   EyeOff,
   Lock,
   LogOut,
   Save,
   Settings,
+  UserCheck,
   UserRound,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
@@ -23,8 +25,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { apiService, type PendingUser } from "@/services/api";
 
 type StoredUser = {
+  [key: string]: unknown;
+  id?: string | number;
   name?: string;
   nome?: string;
   nomeCompleto?: string;
@@ -33,9 +38,25 @@ type StoredUser = {
   userName?: string;
   user_name?: string;
   email?: string;
+  role?: string;
+  roles?: string[] | string;
+  perfil?: string;
+  tipo?: string;
+  admin?: boolean;
+  isAdmin?: boolean;
+  is_admin?: boolean;
+  scope?: string;
+  scopes?: string[] | string;
+  authorities?: string[] | { authority?: string }[];
 };
 
 const SETTINGS_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
+const USE_PENDING_USERS_MOCK_FALLBACK = true;
+const MOCK_PENDING_USERS: PendingUser[] = [
+  { id: 101, username: "ana.martins", email: "ana.martins@email.com", aprovado: false },
+  { id: 102, username: "bruno.costa", email: "bruno.costa@email.com", aprovado: false },
+  { id: 103, username: "carla.nascimento", email: "carla.nascimento@email.com", aprovado: false },
+];
 
 function formatNameFromEmail(email?: string) {
   const localPart = String(email ?? "").trim().split("@")[0] ?? "";
@@ -72,6 +93,103 @@ function resolveUserName(user: StoredUser | null) {
   return formatNameFromEmail(user.email);
 }
 
+function normalizeRoleValue(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function isAdminUser(user: StoredUser | null) {
+  if (!user) return false;
+  if (user.admin === true || user.isAdmin === true || user.is_admin === true) return true;
+
+  const scalarRoles = [user.role, user.perfil, user.tipo].map(normalizeRoleValue);
+  if (scalarRoles.some((value) => ["admin", "administrador", "administrator"].includes(value))) {
+    return true;
+  }
+
+  const roles = Array.isArray(user.roles) ? user.roles : String(user.roles ?? "").split(",");
+  if (roles.some((role) => normalizeRoleValue(role).includes("admin"))) {
+    return true;
+  }
+
+  const scopes = Array.isArray(user.scopes)
+    ? user.scopes
+    : String(user.scopes ?? user.scope ?? "").split(/[,\s]+/);
+  if (scopes.some((scope) => normalizeRoleValue(scope).includes("admin"))) {
+    return true;
+  }
+
+  if (Array.isArray(user.authorities)) {
+    return user.authorities.some((authority) => {
+      const value =
+        typeof authority === "string"
+          ? authority
+          : authority?.authority;
+      return normalizeRoleValue(value).includes("admin");
+    });
+  }
+
+  return false;
+}
+
+function decodeBase64Url(value: string) {
+  const normalizedValue = value.replace(/-/g, "+").replace(/_/g, "/");
+  const paddedValue = normalizedValue.padEnd(
+    normalizedValue.length + ((4 - (normalizedValue.length % 4)) % 4),
+    "=",
+  );
+  const atob = (globalThis as { atob?: (encodedValue: string) => string }).atob;
+
+  if (atob) {
+    return atob(paddedValue);
+  }
+
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let buffer = 0;
+  let bits = 0;
+  let decodedValue = "";
+
+  for (const character of paddedValue.replace(/=+$/, "")) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) continue;
+
+    buffer = (buffer << 6) | index;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      decodedValue += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+
+  try {
+    return decodeURIComponent(
+      decodedValue
+        .split("")
+        .map((character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join(""),
+    );
+  } catch {
+    return decodedValue;
+  }
+}
+
+function decodeJwtPayload(token?: string | null): StoredUser | null {
+  const payload = token?.split(".")[1];
+  if (!payload) return null;
+
+  try {
+    return JSON.parse(decodeBase64Url(payload)) as StoredUser;
+  } catch {
+    return null;
+  }
+}
+
+function resolvePendingUsername(user: PendingUser) {
+  return String(user.username ?? user.name ?? user.nome ?? formatNameFromEmail(user.email) ?? "").trim();
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -83,21 +201,37 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [approvingUserId, setApprovingUserId] = useState<string | number | null>(null);
+  const [usingPendingUsersMock, setUsingPendingUsersMock] = useState(false);
+
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const [storedUser, legacyStoredUser, storedDisplayName, legacyDisplayName] = await Promise.all([
+        const [
+          storedUser,
+          legacyStoredUser,
+          storedDisplayName,
+          legacyDisplayName,
+          storedToken,
+          legacyStoredToken,
+        ] = await Promise.all([
           AsyncStorage.getItem("user"),
           AsyncStorage.getItem("@user"),
           AsyncStorage.getItem("displayName"),
           AsyncStorage.getItem("@displayName"),
+          AsyncStorage.getItem("authToken"),
+          AsyncStorage.getItem("@authToken"),
         ]);
 
         const rawUser = storedUser || legacyStoredUser;
         const parsedUser = rawUser ? (JSON.parse(rawUser) as StoredUser) : null;
+        const tokenClaims = decodeJwtPayload(storedToken || legacyStoredToken);
         const displayName = String(storedDisplayName || legacyDisplayName || "").trim();
         const mergedUser = {
+          ...(tokenClaims ?? {}),
           ...(parsedUser ?? {}),
           ...(displayName ? { displayName } : {}),
         };
@@ -105,15 +239,41 @@ export default function SettingsPage() {
         setUser(mergedUser);
         setName(resolveUserName(mergedUser));
         setEmail(String(mergedUser.email ?? "").trim());
+        setIsAdmin(mergedUser?.email === "lucileny6@gmail.com");
       } catch {
         setUser(null);
         setName("");
         setEmail("");
+        setIsAdmin(false);
       }
     };
 
     void loadUser();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setPendingUsers([]);
+      setUsingPendingUsersMock(false);
+      return;
+    }
+
+    const loadPendingUsers = async () => {
+      try {
+        const users = await apiService.getPendingUsers();
+        setPendingUsers(users);
+        setUsingPendingUsersMock(false);
+      } catch {
+        
+
+        setPendingUsers([]);
+        setUsingPendingUsersMock(false);
+        Alert.alert("Erro", "Nao foi possivel carregar os usuarios pendentes.");
+      }
+    };
+
+    void loadPendingUsers();
+  }, [isAdmin]);
 
   const passwordButtonDisabled = useMemo(
     () => !newPassword.trim() || !confirmPassword.trim(),
@@ -159,6 +319,25 @@ export default function SettingsPage() {
     setNewPassword("");
     setConfirmPassword("");
     Alert.alert("Alterar senha", "Funcao visual por enquanto. Nenhuma chamada ao backend foi feita.");
+  };
+
+  const handleApproveUser = async (pendingUser: PendingUser) => {
+    setApprovingUserId(pendingUser.id);
+
+    try {
+      if (usingPendingUsersMock) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      } else {
+        await apiService.approveUser(pendingUser.id);
+      }
+
+      setPendingUsers((currentUsers) => currentUsers.filter((item) => item.id !== pendingUser.id));
+      Alert.alert("Usuario aprovado", `${resolvePendingUsername(pendingUser)} foi aprovado com sucesso.`);
+    } catch {
+      Alert.alert("Erro", "Nao foi possivel aprovar este usuario.");
+    } finally {
+      setApprovingUserId(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -232,6 +411,52 @@ export default function SettingsPage() {
                 <Text style={styles.primaryButtonText}>Salvar perfil</Text>
               </TouchableOpacity>
             </View>
+
+            {isAdmin ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <UserCheck size={20} color="#10233f" strokeWidth={2.2} />
+                  <Text style={styles.sectionTitle}>Usuários Pendentes</Text>
+                </View>
+
+                {pendingUsers.length > 0 ? (
+                  <View style={styles.pendingUsersList}>
+                    {pendingUsers.map((pendingUser) => {
+                      const isApproving = approvingUserId === pendingUser.id;
+
+                      return (
+                        <View key={String(pendingUser.id)} style={styles.pendingUserItem}>
+                          <View style={styles.pendingUserAvatar}>
+                            <Text style={styles.pendingUserInitial}>
+                              {resolvePendingUsername(pendingUser).charAt(0).toUpperCase() || "U"}
+                            </Text>
+                          </View>
+
+                          <View style={styles.pendingUserInfo}>
+                            <Text style={styles.pendingUserName}>{resolvePendingUsername(pendingUser)}</Text>
+                            <Text style={styles.pendingUserEmail}>{pendingUser.email}</Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={[styles.approveButton, isApproving && styles.disabledButton]}
+                            onPress={() => handleApproveUser(pendingUser)}
+                            disabled={isApproving}
+                            accessibilityRole="button"
+                          >
+                            <CheckCircle2 size={16} color="#ffffff" strokeWidth={2.2} />
+                            <Text style={styles.approveButtonText}>{isApproving ? "Aprovando" : "Aprovar"}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.emptyPendingUsers}>
+                    <Text style={styles.emptyPendingUsersText}>Nenhum usuario pendente no momento.</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -482,6 +707,78 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: "#6f7f91",
     opacity: 0.72,
+  },
+  pendingUsersList: {
+    gap: 10,
+  },
+  pendingUserItem: {
+    minHeight: 64,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(154, 176, 194, 0.34)",
+    backgroundColor: "rgba(244, 249, 251, 0.96)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+  },
+  pendingUserAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20, 184, 166, 0.12)",
+  },
+  pendingUserInitial: {
+    color: "#0f766e",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  pendingUserInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pendingUserName: {
+    color: "#10233f",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  pendingUserEmail: {
+    marginTop: 2,
+    color: "#5f7087",
+    fontSize: 12,
+  },
+  approveButton: {
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: "#0f766e",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  approveButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  emptyPendingUsers: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(154, 176, 194, 0.28)",
+    backgroundColor: "rgba(244, 249, 251, 0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  emptyPendingUsersText: {
+    color: "#5f7087",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
   },
   logoutButton: {
     minHeight: 42,

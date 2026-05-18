@@ -34,6 +34,33 @@ const normalizeCategoryKey = (value: string) =>
     .trim()
     .toLowerCase();
 
+const normalizeExpenseCategoryLabel = (value: string) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "Sem categoria";
+
+  const normalized = normalizeCategoryKey(raw);
+
+  if (
+    [
+      "alimentacao",
+      "alimentos",
+      "comida",
+      "mercado",
+      "mercaddo",
+      "supermercado",
+      "feira",
+      "padaria",
+      "acougue",
+      "sacolao",
+      "hortifruti",
+    ].includes(normalized)
+  ) {
+    return "Alimentacao";
+  }
+
+  return raw;
+};
+
 const createStartOfDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 
@@ -81,10 +108,17 @@ export default function GraphsPage() {
     }
   }, [isLoadingAuth]);
 
-  const normalizedTransactions = useMemo(
-    () => transactions.map((transaction, index) => normalizeDashboardTransaction(transaction, index)),
-    [transactions],
+ const normalizedTransactions = useMemo(() => {
+  console.log("RAW transactions:", transactions);
+
+  const result = transactions.map((transaction, index) =>
+    normalizeDashboardTransaction(transaction, index)
   );
+
+  console.log("NORMALIZED transactions:", result);
+
+  return result;
+}, [transactions]);
 
   const appliedPeriod = useMemo(() => {
     const parsedStart = parseTransactionDate(appliedStartDate);
@@ -136,6 +170,7 @@ export default function GraphsPage() {
       totalIncome: financialTotals.totalIncome,
       totalExpense: financialTotals.totalExpense,
       totalInvestment: financialTotals.totalInvestment,
+      totalInvestmentYield: financialTotals.totalInvestmentYield,
       balance: financialTotals.balance,
       title: "GRAFICOS FINANCEIROS",
       typeLabel: "Todos",
@@ -166,19 +201,29 @@ export default function GraphsPage() {
     });
 
     const totalsByCategory = periodExpenses.reduce((acc, transaction) => {
-      const category = String(transaction.category || "Sem categoria").trim() || "Sem categoria";
-      acc.set(category, (acc.get(category) ?? 0) + transaction.amount);
+      const category = normalizeExpenseCategoryLabel(
+        String(transaction.category || "Sem categoria"),
+      );
+      const categoryKey = normalizeCategoryKey(category) || normalizeCategoryKey("Sem categoria");
+      const current = acc.get(categoryKey) ?? {
+        category,
+        amount: 0,
+      };
+
+      current.amount += transaction.amount;
+      acc.set(categoryKey, current);
+
       return acc;
-    }, new Map<string, number>());
+    }, new Map<string, { category: string; amount: number }>());
 
     const budgetMap = categoryBudgets.reduce((acc, item) => {
       acc.set(normalizeCategoryKey(item.category), item.amount);
       return acc;
     }, new Map<string, number>());
 
-    return [...totalsByCategory.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([category, amount], index) => ({
+    return [...totalsByCategory.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map(({ category, amount }, index) => ({
         category,
         amount,
         budget: budgetMap.get(normalizeCategoryKey(category)) ?? 0,

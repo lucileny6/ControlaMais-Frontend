@@ -8,7 +8,7 @@ export type { CumulativeFinanceChartPoint } from "@/lib/financial-chart";
 
 type ChartSeriesKey = keyof Pick<
   CumulativeFinanceChartPoint,
-  "income" | "expense" | "investment" | "balance"
+  "income" | "expense" | "investment" | "investmentYield" | "balance"
 >;
 
 type ChartSeries = {
@@ -22,6 +22,7 @@ const CHART_SERIES: ChartSeries[] = [
   { key: "income", label: "Receita", color: "#16a34a", strokeWidth: 2 },
   { key: "expense", label: "Despesa", color: "#dc2626", strokeWidth: 2 },
   { key: "investment", label: "Investimento", color: "#60a5fa", strokeWidth: 2 },
+  { key: "investmentYield", label: "Rendimento Invest.", color: "#2563eb", strokeWidth: 2 },
   { key: "balance", label: "Saldo", color: "#1e293b", strokeWidth: 3 },
 ];
 
@@ -60,14 +61,86 @@ const buildSmoothPath = (points: { x: number; y: number }[]) => {
   return path;
 };
 
-const formatAxisLabel = (dateKey: string) => {
-  const [, , day] = dateKey.split("-");
-  return day ?? dateKey;
+const buildLinearPath = (points: { x: number; y: number }[]) => {
+  if (points.length === 0) return "";
+
+  return points
+    .map((point, index) =>
+      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`,
+    )
+    .join(" ");
 };
 
+const buildSeriesPath = (
+  series: ChartSeries,
+  points: { x: number; y: number }[],
+) =>
+  series.key === "investmentYield"
+    ? buildLinearPath(points)
+    : buildSmoothPath(points);
+
+const formatAxisLabel = (dateKey: string) => {
+  const [, month, day] = dateKey.split("-");
+
+  if (!day || day === "01") {
+    const monthNames = [
+      "Jan",
+      "Fev",
+      "Mar",
+      "Abr",
+      "Mai",
+      "Jun",
+      "Jul",
+      "Ago",
+      "Set",
+      "Out",
+      "Nov",
+      "Dez",
+    ];
+
+    return monthNames[Number(month) - 1] ?? month;
+  }
+
+  return day;
+};
+ 
+
+
+
 const formatTooltipLabel = (dateKey: string) => {
-  const [year, month, day] = dateKey.split("-");
-  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  const parts = dateKey.split("-");
+
+  // formato mensal: YYYY-MM
+  if (parts.length === 2) {
+    const [year, month] = parts;
+
+    const monthNames = [
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+    ];
+
+    return `${monthNames[Number(month) - 1]} de ${year}`;
+  }
+
+  // formato diário: YYYY-MM-DD
+  const [year, month, day] = parts;
+
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+  );
+
   return parsed.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
@@ -90,22 +163,35 @@ export function CumulativeFinanceLineChart({
   const paddingRight = isCompactScreen ? 14 : 26;
   const paddingBottom = isCompactScreen ? 42 : 52;
   const paddingLeft = isCompactScreen ? 44 : 56;
-  const plotWidth = Math.max(width - paddingLeft - paddingRight, 140);
+ const plotWidth = Math.max(
+  width - paddingLeft - paddingRight,
+  140
+);
   const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, isCompactScreen ? 130 : 160);
   const safeActiveIndex = Math.min(activeIndex, Math.max(0, data.length - 1));
   const activePoint = data[safeActiveIndex];
 
-  const values = data.flatMap((item) => [item.income, item.expense, item.investment, item.balance]);
+  const values = data.flatMap((item) => [
+    item.income,
+    item.expense,
+    item.investment,
+    item.investmentYield,
+    item.balance,
+  ]);
   const minValue = Math.min(...values, 0);
   const maxValue = Math.max(...values, 0);
   const span = maxValue - minValue || 1;
-  const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+  const horizontalInset = 24;
 
-  const getX = (index: number) => paddingLeft + stepX * index;
+  const stepX = data.length > 1
+  ? (plotWidth - horizontalInset * 2) / (data.length - 1)
+  : 0;
+  const getX = (index: number) =>
+  paddingLeft + horizontalInset + stepX * index;
   const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
 
   const tooltipWidth = Math.min(isCompactScreen ? 148 : 188, plotWidth);
-  const tooltipHeight = isCompactScreen ? 92 : 104;
+  const tooltipHeight = isCompactScreen ? 106 : 120;
   const activeX = getX(safeActiveIndex);
   const tooltipX = Math.min(
     Math.max(activeX - tooltipWidth / 2, paddingLeft),
@@ -115,11 +201,7 @@ export function CumulativeFinanceLineChart({
   const interactiveZoneTop = paddingTop;
   const interactiveZoneHeight = plotHeight;
   const interactiveZoneWidth = data.length > 1 ? stepX : plotWidth;
-  const xAxisLabelStep = isCompactScreen
-    ? Math.max(1, Math.ceil(data.length / 4))
-    : isSmallScreen
-      ? Math.max(1, Math.ceil(data.length / 6))
-      : 1;
+  const xAxisLabelStep = 1;
 
   return (
     <View style={styles.lineChartCard}>
@@ -167,7 +249,7 @@ export function CumulativeFinanceLineChart({
                 y={chartHeight - 14}
                 fontSize={isCompactScreen ? "9" : "11"}
                 fill="#718198"
-                textAnchor="middle"
+                textAnchor={index === 0 ? "start" : index === data.length - 1 ? "end" : "middle"}
               >
                 {formatAxisLabel(point.date)}
               </SvgText>
@@ -183,7 +265,7 @@ export function CumulativeFinanceLineChart({
             return (
               <React.Fragment key={series.key}>
                 <Path
-                  d={buildSmoothPath(points)}
+                  d={buildSeriesPath(series, points)}
                   fill="none"
                   stroke={series.color}
                   strokeWidth={series.strokeWidth}
@@ -204,6 +286,7 @@ export function CumulativeFinanceLineChart({
               </React.Fragment>
             );
           })}
+          
 
           {activePoint ? (
             <>
@@ -244,7 +327,10 @@ export function CumulativeFinanceLineChart({
               <SvgText x={tooltipX + 10} y={tooltipY + (isCompactScreen ? 64 : 74)} fontSize={isCompactScreen ? "9" : "11"} fill="#93c5fd">
                 {`Investimento: ${formatCurrency(activePoint.investment)}`}
               </SvgText>
-              <SvgText x={tooltipX + 10} y={tooltipY + (isCompactScreen ? 78 : 90)} fontSize={isCompactScreen ? "9" : "11"} fill="#cbd5e1">
+              <SvgText x={tooltipX + 10} y={tooltipY + (isCompactScreen ? 78 : 90)} fontSize={isCompactScreen ? "9" : "11"} fill="#bfdbfe">
+                {`Rendimento Invest.: ${formatCurrency(activePoint.investmentYield)}`}
+              </SvgText>
+              <SvgText x={tooltipX + 10} y={tooltipY + (isCompactScreen ? 92 : 106)} fontSize={isCompactScreen ? "9" : "11"} fill="#cbd5e1">
                 {`Saldo: ${formatCurrency(activePoint.balance)}`}
               </SvgText>
             </>
@@ -314,12 +400,19 @@ export function MobileCumulativeFinanceLineChart({
   const safeActiveIndex = Math.min(activeIndex, Math.max(0, data.length - 1));
   const activePoint = data[safeActiveIndex];
 
-  const values = data.flatMap((item) => [item.income, item.expense, item.investment, item.balance]);
+  const values = data.flatMap((item) => [
+    item.income,
+    item.expense,
+    item.investment,
+    item.investmentYield,
+    item.balance,
+  ]);
   const minValue = Math.min(...values, 0);
   const maxValue = Math.max(...values, 0);
   const span = maxValue - minValue || 1;
   const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0;
-  const getX = (index: number) => paddingLeft + stepX * index;
+  const getX = (index: number) =>
+  paddingLeft + 12 + stepX * index;
   const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
   const interactiveZoneWidth = data.length > 1 ? Math.max(stepX, 28) : plotWidth;
   const labelStep = Math.max(1, Math.ceil(data.length / 6));
@@ -385,7 +478,7 @@ export function MobileCumulativeFinanceLineChart({
                 return (
                   <React.Fragment key={`mobile-${series.key}`}>
                     <Path
-                      d={buildSmoothPath(points)}
+                      d={buildSeriesPath(series, points)}
                       fill="none"
                       stroke={series.color}
                       strokeWidth={series.key === "balance" ? 2.5 : 2}
@@ -466,6 +559,9 @@ export function MobileCumulativeFinanceLineChart({
           <Text style={[styles.mobileDetailsValue, { color: "#60a5fa" }]}>
             Investimento: {formatCurrency(activePoint.investment)}
           </Text>
+          <Text style={[styles.mobileDetailsValue, { color: "#2563eb" }]}>
+            Rendimento Invest.: {formatCurrency(activePoint.investmentYield)}
+          </Text>
           <Text style={[styles.mobileDetailsValue, { color: "#1e293b" }]}>
             Saldo: {formatCurrency(activePoint.balance)}
           </Text>
@@ -488,7 +584,10 @@ export function IncomeExpenseChart({
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
   const isCompactScreen = width < 430;
-  const chartWidth = Math.max(220, Math.min(width - (isLargeScreen ? 180 : isCompactScreen ? 52 : 72), 760));
+  const chartWidth = Math.max(
+    220,
+    Math.min(width - (isLargeScreen ? 180 : isCompactScreen ? 52 : 72), 760),
+  );
   const latestPoint = chartData[chartData.length - 1] ?? null;
 
   return (
@@ -538,6 +637,12 @@ export function IncomeExpenseChart({
                   <Text style={styles.summaryLabel}>Investimento</Text>
                   <Text style={[styles.summaryValue, isCompactScreen && styles.summaryValueCompact, { color: "#60a5fa" }]}>
                     {formatCurrency(latestPoint.investment)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryCard, isCompactScreen && styles.summaryCardCompact]}>
+                  <Text style={styles.summaryLabel}>Rendimentos</Text>
+                  <Text style={[styles.summaryValue, isCompactScreen && styles.summaryValueCompact, { color: "#2563eb" }]}>
+                    {formatCurrency(latestPoint.investmentYield)}
                   </Text>
                 </View>
                 <View style={[styles.summaryCard, isCompactScreen && styles.summaryCardCompact]}>
@@ -595,7 +700,7 @@ const styles = StyleSheet.create({
   },
   lineChartFrame: {
     alignSelf: "center",
-    overflow: "hidden",
+    overflow: "visible",
   },
   lineChartOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -720,3 +825,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+

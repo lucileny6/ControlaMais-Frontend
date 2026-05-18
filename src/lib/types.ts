@@ -109,11 +109,10 @@ export interface Goal {
  * (o backend controla a lógica)
  */
 export type ChatState = "NORMAL" | "AGUARDANDO_CONFIRMACAO";
-export type ChatResponseSource = "front-local" | "backend-api" | "webhook";
 
 export interface AITransactionAction {
-  tipo?: "RECEITA" | "DESPESA" | "income" | "expense";
-  type?: "RECEITA" | "DESPESA" | "income" | "expense";
+  tipo?: "RECEITA" | "DESPESA" | "Rendimento de Investimento" | "income" | "expense";
+  type?: "RECEITA" | "DESPESA" | "Rendimento de Investimento" | "income" | "expense";
   valor?: number | string;
   amount?: number | string;
   categoria?: string;
@@ -136,6 +135,4 @@ export interface AIResponse {
   dados?: Record<string, unknown>;
   acao?: AITransactionAction;
   action?: AITransactionAction;
-  source?: ChatResponseSource;
-  sourceNote?: string;
 }

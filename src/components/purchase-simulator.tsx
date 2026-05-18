@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import Constants from 'expo-constants';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Line, Polygon, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 import { toast } from '@/hooks/use-toast';
@@ -8,10 +9,48 @@ import { useDashboard } from '@/hooks/useDashboard';
 import { apiService } from '@/services/api';
 import { calculateMonthlyCashFlow, normalizeFinancialTransaction } from '@/services/financialEngine';
 
-const WEBHOOK_URL =
-  process.env.EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL ??
-  process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL ??
-  'http://localhost:5678/webhook/c4e4305b-1390-4c54-99de-71bc6c3b73b3';
+const PURCHASE_SIMULATOR_WEBHOOK_PATH = '/webhook/c4e4305b-1390-4c54-99de-71bc6c3b73b3';
+
+const getExpoDevServerHost = () => {
+  const constants = Constants as typeof Constants & {
+    manifest2?: { extra?: { expoClient?: { hostUri?: string } } };
+  };
+  const hostUri =
+    constants.expoConfig?.hostUri ??
+    constants.manifest2?.extra?.expoClient?.hostUri;
+
+  return hostUri?.split(':')[0] || null;
+};
+
+const replaceLocalhostForMobile = (url: string) => {
+  if (Platform.OS === 'web') {
+    return url;
+  }
+
+  const expoHost = getExpoDevServerHost();
+  if (!expoHost) {
+    return url;
+  }
+
+  return url.replace(/\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i, `//${expoHost}:5678`);
+};
+
+const getPurchaseSimulatorWebhookUrl = () => {
+  const configuredUrl =
+    process.env.EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL?.trim() ||
+    process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL?.trim();
+
+  if (configuredUrl) {
+    return replaceLocalhostForMobile(configuredUrl);
+  }
+
+  if (Platform.OS === 'web') {
+    return `http://localhost:5678${PURCHASE_SIMULATOR_WEBHOOK_PATH}`;
+  }
+
+  const expoHost = getExpoDevServerHost();
+  return expoHost ? `http://${expoHost}:5678${PURCHASE_SIMULATOR_WEBHOOK_PATH}` : null;
+};
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -95,6 +134,11 @@ export function PurchaseSimulator() {
       setIsLoading(true);
       setResult(null);
       setShowResultDetails(false);
+      const webhookUrl = getPurchaseSimulatorWebhookUrl();
+      if (!webhookUrl) {
+        throw new Error('Configure EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL com a URL do n8n acessivel pelo celular.');
+      }
+
       const projecaoMensal = await buildProjectedCashFlowPayload(parsedInstallments, saldo);
 
       const payload = {
@@ -109,9 +153,9 @@ export function PurchaseSimulator() {
         projecao_mensal: projecaoMensal,
         saldos_mensais: projecaoMensal.map((mes) => mes.saldo_base),
       };
-      console.log('[PurchaseSimulator] webhook payload:', payload);
+      console.log('[PurchaseSimulator] webhook request:', { url: webhookUrl, payload });
 
-      const response = await fetch(WEBHOOK_URL, {
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -792,11 +836,20 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
   const getY = (value: number) => paddingTop + ((maxValue - value) / span) * plotHeight;
   const getX = (index: number) => paddingLeft + stepX * index;
 
-  const series = [
+  type SimulationNumericKey = Exclude<keyof SimulationPoint, 'label'>;
+  type Serie = {
+  key: SimulationNumericKey;
+  label: string;
+  color: string;
+  strokeWidth: number;
+  opacity: number;
+  dash?: string;
+};
+  const series: Serie[] = [
     { key: 'saldoBase', label: 'Saldo Base', color: '#3b82f6', strokeWidth: 2, opacity: 0.95 },
     { key: 'parcela', label: 'Parcela', color: '#f97316', strokeWidth: 2, opacity: 0.6, dash: '5 5' },
     { key: 'saldoFinal', label: 'Saldo Final', color: '#16a34a', strokeWidth: 3, opacity: 1 },
-  ] as const;
+  ];
 
   const saldoFinalAreaPoints = data
     .map((point, index) => {

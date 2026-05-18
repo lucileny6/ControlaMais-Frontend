@@ -4,26 +4,31 @@ import { Label } from "@/components/ui/label";
 import { apiService } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type RegisterResponse = {
-  token?: string;
-  user?: unknown;
+  message?: string;
+  data?: {
+    message?: string;
+  };
 };
+
+const PENDING_REGISTRATION_EMAIL_KEY = "pendingRegistrationEmail";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async () => {
     setError("");
+    setSuccessMessage("");
     setIsLoading(true);
 
     if (!name || !email || !password) {
@@ -39,28 +44,18 @@ export default function RegisterPage() {
     }
 
     try {
+      await apiService.clearAuthSession();
       const res = (await apiService.register(name, email, password)) as RegisterResponse;
-      await AsyncStorage.multiSet([
-        ["displayName", name.trim()],
-        ["@displayName", name.trim()],
-      ]);
+      const responseData = res.data ?? res;
+      const message = responseData.message ?? "Cadastro realizado. Aguarde aprovação do administrador";
 
-      if (res.token) {
-        await AsyncStorage.multiSet([
-          ["authToken", res.token],
-          ["@authToken", res.token],
-        ]);
-      }
-      if (res.user) {
-        const serializedUser = JSON.stringify(res.user);
-        await AsyncStorage.multiSet([
-          ["user", serializedUser],
-          ["@user", serializedUser],
-        ]);
-      }
-
-      router.replace("/(tabs)/dashboard");
+      await apiService.clearAuthSession();
+      setPassword("");
+      await AsyncStorage.setItem(PENDING_REGISTRATION_EMAIL_KEY, email.trim().toLowerCase());
+      setSuccessMessage(message);
+      Alert.alert("Cadastro realizado", message);
     } catch (err: any) {
+      await apiService.clearAuthSession();
       console.log("Erro no cadastro:", err);
       setError(err.message || "Falha no cadastro");
       Alert.alert("Erro", err.message || "Falha no cadastro");
@@ -130,6 +125,12 @@ export default function RegisterPage() {
                 {error ? (
                   <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                ) : null}
+
+                {successMessage ? (
+                  <View style={styles.successContainer}>
+                    <Text style={styles.successText}>{successMessage}</Text>
                   </View>
                 ) : null}
 
@@ -229,6 +230,20 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#DC2626",
     fontSize: 14,
+    textAlign: "center",
+  },
+  successContainer: {
+    backgroundColor: "rgba(236, 253, 245, 0.95)",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginBottom: 16,
+  },
+  successText: {
+    color: "#047857",
+    fontSize: 14,
+    fontWeight: "700",
     textAlign: "center",
   },
   button: {

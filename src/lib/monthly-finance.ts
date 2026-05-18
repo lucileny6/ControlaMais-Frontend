@@ -1,4 +1,8 @@
-import { calculateMonthlyFinancialTotals, isInvestmentTransaction } from "@/lib/investments";
+import {
+  calculateMonthlyFinancialTotals,
+  isInvestmentTransaction,
+  isInvestmentYieldCategory,
+} from "@/lib/investments";
 import { DashboardTransaction, TransactionType } from "@/lib/types";
 
 export type MonthlyFinanceSnapshot = {
@@ -7,6 +11,7 @@ export type MonthlyFinanceSnapshot = {
   totalIncome: number;
   totalExpenses: number;
   totalInvestments: number;
+  totalInvestmentYield: number;
   balance: number;
   incomeCount: number;
   expenseCount: number;
@@ -25,7 +30,7 @@ export const parseTransactionDate = (value: unknown): Date | null => {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const isoPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const isoPattern = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/;
   const brSlashPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
   const brDashPattern = /^(\d{2})-(\d{2})-(\d{4})$/;
   const monthYearPattern = /^(\d{2})-(\d{4})$/;
@@ -56,29 +61,113 @@ export const parseTransactionDate = (value: unknown): Date | null => {
 };
 
 export const normalizeDashboardTransaction = (transaction: any, index: number): DashboardTransaction => {
-  const rawType = String(transaction?.type ?? transaction?.tipo ?? "expense").toLowerCase().trim();
+  const rawType = String(
+    transaction?.type ??
+      transaction?.tipo ??
+      transaction?.tipoTransacao ??
+      transaction?.tipoLancamento ??
+      transaction?.transactionType ??
+      transaction?.natureza ??
+      "expense",
+  ).toLowerCase().trim();
   const normalizedType: TransactionType =
-    rawType === "income" || rawType === "icome" || rawType === "receita" || rawType === "entrada"
+    rawType === "income" ||
+    rawType === "icome" ||
+    rawType === "receita" ||
+    rawType === "entrada" ||
+    isInvestmentYieldCategory(rawType)
       ? "income"
       : "expense";
-  const rawAmount = Number(transaction?.amount ?? transaction?.valor ?? transaction?.value ?? 0);
+  const rawAmount = parseMonetaryValue(
+    transaction?.amount ??
+      transaction?.valor ??
+      transaction?.value ??
+      transaction?.preco ??
+      transaction?.valorTransacao ??
+      transaction?.valorLancamento ??
+      transaction?.valorEstimado ??
+      0,
+  );
   const amount = Number.isFinite(rawAmount) ? rawAmount : 0;
-  const baseId = String(transaction?.id ?? transaction?._id ?? transaction?.transactionId ?? index);
+  const baseId = String(
+    transaction?.id ??
+      transaction?._id ??
+      transaction?.transactionId ??
+      transaction?.transacaoId ??
+      transaction?.acaoFinanceiraId ??
+      transaction?.idAcaoFinanceira ??
+      index,
+  );
+
+  const category = String(
+    transaction?.category ??
+      transaction?.categoria ??
+      transaction?.grupo ??
+      transaction?.classificacao ??
+      (isInvestmentYieldCategory(rawType) ? "Rendimento de Investimento" : "Sem categoria"),
+  );
 
   return {
     id: `${normalizedType}-${baseId}-${index}`,
-    description: String(transaction?.description ?? transaction?.descricao ?? ""),
-    category: String(transaction?.category ?? transaction?.categoria ?? ""),
+    description: String(
+      transaction?.description ??
+        transaction?.descricao ??
+        transaction?.titulo ??
+        transaction?.nome ??
+        transaction?.mensagem ??
+        transaction?.texto ??
+        "",
+    ),
+    category,
     type: normalizedType,
     amount,
-    date: String(transaction?.date ?? transaction?.data ?? ""),
+    date: String(
+      transaction?.date ??
+        transaction?.data ??
+        transaction?.dataTransacao ??
+        transaction?.dataLancamento ??
+        transaction?.dataDespesa ??
+        transaction?.dataReceita ??
+        transaction?.createdAt ??
+        "",
+    ),
   };
 };
+
+function parseMonetaryValue(value: unknown) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const cleaned = value.trim().replace(/[^\d,.-]/g, "");
+  if (!cleaned) {
+    return 0;
+  }
+
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    const normalized =
+      lastComma > lastDot
+        ? cleaned.replace(/\./g, "").replace(",", ".")
+        : cleaned.replace(/,/g, "");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  const parsed = Number(cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 export const buildMonthlyFinanceSnapshot = (
   transactions: DashboardTransaction[],
   referenceDate: Date = new Date(),
 ): MonthlyFinanceSnapshot => {
+  
   const month = referenceDate.getMonth();
   const year = referenceDate.getFullYear();
 
@@ -92,7 +181,15 @@ export const buildMonthlyFinanceSnapshot = (
   const totalIncome = totals.totalIncome;
   const totalExpenses = totals.totalExpense;
   const totalInvestments = totals.totalInvestment;
+  const totalInvestmentYield = totals.totalInvestmentYield;
   const balance = totals.balance;
+
+  const gastoPercentual =
+  totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
+
+  console.log("Income:", totalIncome);
+  console.log("Expenses:", totalExpenses);
+  console.log("Percentual:", gastoPercentual);
 
   const expenseTotalsByCategory = monthTransactions
     .filter((transaction) => transaction.type === "expense" && !isInvestmentTransaction(transaction))
@@ -119,8 +216,11 @@ export const buildMonthlyFinanceSnapshot = (
     totalIncome,
     totalExpenses,
     totalInvestments,
+    totalInvestmentYield,
     balance,
-    incomeCount: monthTransactions.filter((transaction) => transaction.type === "income").length,
+    incomeCount: monthTransactions.filter(
+      (transaction) => transaction.type === "income" && !isInvestmentYieldCategory(transaction.category),
+    ).length,
     expenseCount: monthTransactions.filter(
       (transaction) => transaction.type === "expense" && !isInvestmentTransaction(transaction),
     ).length,

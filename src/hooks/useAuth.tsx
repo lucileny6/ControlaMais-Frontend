@@ -14,6 +14,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getAuthResponseToken = (response: any) =>
+    String(
+        response?.data?.token ??
+        response?.data?.accessToken ??
+        response?.data?.access_token ??
+        response?.data?.tokenAcesso ??
+        response?.data?.authorization ??
+        response?.token ??
+        response?.accessToken ??
+        response?.access_token ??
+        response?.tokenAcesso ??
+        response?.authorization ??
+        "",
+    )
+        .trim()
+        .replace(/^Bearer\s+/i, "");
+
+const getAuthResponseUser = (response: any) =>
+    response?.data?.user ??
+    response?.data?.usuario ??
+    response?.user ??
+    response?.usuario ??
+    null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -26,10 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const checkAuthState = async () => {
         try {
             const [token, legacyToken, savedUser, legacySavedUser] = await Promise.all([
-                AsyncStorage.getItem('@authToken'),
-                AsyncStorage.getItem('authToken'),
-                AsyncStorage.getItem('@user'),
-                AsyncStorage.getItem('user'),
+                AsyncStorage.getItem("@authToken"),
+                AsyncStorage.getItem("authToken"),
+                AsyncStorage.getItem("@user"),
+                AsyncStorage.getItem("user"),
             ]);
             const authToken = token || legacyToken;
             const userFromStorage = savedUser || legacySavedUser;
@@ -38,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(JSON.parse(userFromStorage));
             }
         } catch (error) {
-            console.error('Error checking auth state:', error);
+            console.error("Error checking auth state:", error);
         } finally {
             setIsLoading(false);
         }
@@ -46,30 +70,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = async (email: string, password: string) => {
         setIsLoading(true);
-        
-        try {
-            const response = await apiService.login(email, password);
-            
-            // ✅ CORREÇÃO: A API retorna { success, message, user, token } diretamente
-            if (response.success && response.user && response.token) {
-                const { user: userData, token } = response;
-                
-                const serializedUser = JSON.stringify(userData);
-                await AsyncStorage.multiSet([
-                    ['@authToken', token],
-                    ['authToken', token],
-                    ['@user', serializedUser],
-                    ['user', serializedUser],
-                ]);
-                
-                setUser(userData);
-                
-                router.push('/(tabs)/dashboard');
-            } else {
-                throw new Error(response.message || 'Login failed');
-            }
 
+        try {
+            await apiService.clearAuthSession();
+            const response = await apiService.login(email, password);
+
+            const token = getAuthResponseToken(response);
+            const userData = getAuthResponseUser(response);
+
+            if (token) {
+                const resolvedUser = userData ?? ({ email } as User);
+                const serializedUser = JSON.stringify(resolvedUser);
+
+                await AsyncStorage.multiSet([
+                    ["@authToken", token],
+                    ["authToken", token],
+                    ["@user", serializedUser],
+                    ["user", serializedUser],
+                ]);
+
+                setUser(resolvedUser);
+                router.replace("/(tabs)/dashboard");
+            } else {
+                throw new Error(response.message || "Login failed");
+            }
         } catch (error) {
+            await apiService.clearAuthSession();
+            setUser(null);
             console.error("Login failed:", error);
             throw error;
         } finally {
@@ -79,30 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const register = async (name: string, email: string, password: string) => {
         setIsLoading(true);
-        
+
         try {
-            const response = await apiService.register(name, email, password);
-            
-            // ✅ CORREÇÃO: Mesma estrutura do login
-            if (response.success && response.user && response.token) {
-                const { user: userData, token } = response;
-
-                const serializedUser = JSON.stringify(userData);
-                await AsyncStorage.multiSet([
-                    ['@authToken', token],
-                    ['authToken', token],
-                    ['@user', serializedUser],
-                    ['user', serializedUser],
-                ]);
-                
-                setUser(userData);
-                
-                router.push('/(tabs)/dashboard');
-            } else {
-                throw new Error(response.message || 'Registration failed');
-            }
-
+            await apiService.clearAuthSession();
+            await apiService.register(name, email, password);
+            await apiService.clearAuthSession();
+            setUser(null);
         } catch (error) {
+            await apiService.clearAuthSession();
+            setUser(null);
             console.error("Registration failed:", error);
             throw error;
         } finally {
@@ -113,19 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logout = async () => {
         try {
             await apiService.logout();
-            
-            await AsyncStorage.multiRemove(['@authToken', '@user', 'authToken', 'user']);
-            
             setUser(null);
-            
-            router.replace('/login');
-
+            router.replace("/login");
         } catch (error) {
             console.error("Logout error:", error);
-            
-            await AsyncStorage.multiRemove(['@authToken', '@user', 'authToken', 'user']);
+            await apiService.clearAuthSession();
             setUser(null);
-            router.replace('/login');
+            router.replace("/login");
         }
     };
 

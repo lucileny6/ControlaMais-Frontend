@@ -17,13 +17,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { apiService } from "../src/services/api";
 
 type LoginResponse = {
-  token: string;
-  message: string;
+  token?: string;
+  accessToken?: string;
+  access_token?: string;
+  tokenAcesso?: string;
+  authorization?: string;
+  jwt?: string;
+  message?: string;
   user?: unknown;
+  usuario?: unknown;
   data?: {
     token?: string;
+    accessToken?: string;
+    access_token?: string;
+    tokenAcesso?: string;
+    authorization?: string;
+    jwt?: string;
     message?: string;
     user?: unknown;
+    usuario?: unknown;
   };
 };
 
@@ -78,6 +90,82 @@ const resolveDisplayNameFromLogin = (user: unknown, email: string) => {
   return formatNameFromEmail(email);
 };
 
+const resolveLoginErrorMessage = (message: string) => {
+  const normalizedMessage = message.toLowerCase();
+  const isPendingApproval =
+    normalizedMessage.includes("aprov") ||
+    normalizedMessage.includes("pendente") ||
+    normalizedMessage.includes("bloque");
+
+  if (isPendingApproval) {
+    return "Usuário ainda não aprovado. Aguarde aprovação do administrador.";
+  }
+
+  if (normalizedMessage.includes("401") || normalizedMessage.includes("sessao") || normalizedMessage.includes("sem permissao")) {
+    return "Usuário não aprovado ou credenciais inválidas";
+  }
+
+  return message || "Nao foi possivel realizar login.";
+};
+
+const PENDING_REGISTRATION_EMAIL_KEY = "pendingRegistrationEmail";
+
+const getPendingRegistrationEmail = async () => {
+  const storedEmail = await AsyncStorage.getItem(PENDING_REGISTRATION_EMAIL_KEY);
+  return String(storedEmail ?? "").trim().toLowerCase();
+};
+
+const clearPendingRegistrationEmail = async () => {
+  await AsyncStorage.removeItem(PENDING_REGISTRATION_EMAIL_KEY);
+};
+
+const saveAuthSession = async (token: string, user: Record<string, unknown>) => {
+  await AsyncStorage.multiSet([
+    ["authToken", token],
+    ["@authToken", token],
+    ["user", JSON.stringify(user)],
+    ["@user", JSON.stringify(user)],
+  ]);
+};
+
+const saveDisplayName = async (displayName: string) => {
+  await AsyncStorage.multiSet([
+    ["displayName", displayName],
+    ["@displayName", displayName],
+  ]);
+};
+
+const getLoginToken = (response: LoginResponse) =>
+  normalizeLoginToken(
+    response.data?.token ??
+      response.data?.accessToken ??
+      response.data?.access_token ??
+      response.data?.tokenAcesso ??
+      response.data?.authorization ??
+      response.data?.jwt ??
+      response.token ??
+      response.accessToken ??
+      response.access_token ??
+      response.tokenAcesso ??
+      response.authorization ??
+      response.jwt ??
+      "",
+  );
+
+const normalizeLoginToken = (token: string) =>
+  String(token ?? "")
+    .trim()
+    .replace(/^Bearer\s+/i, "");
+
+const getLoginUser = (response: LoginResponse) =>
+  response.data?.user ??
+  response.data?.usuario ??
+  response.user ??
+  response.usuario;
+
+const getLoginMessage = (response: LoginResponse) =>
+  response.data?.message ?? response.message;
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -93,28 +181,21 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await AsyncStorage.multiRemove([
-        "authToken",
-        "user",
-        "displayName",
-        "@authToken",
-        "@user",
-        "@displayName",
-      ]);
+      await apiService.clearAuthSession();
 
       const response = (await apiService.login(email, password)) as LoginResponse;
-      const responseData = response.data ?? response;
-      const token = responseData.token;
+      const token = getLoginToken(response);
+      const responseUser = getLoginUser(response);
 
       if (!token) {
         throw new Error("Token de autenticacao nao retornado pelo backend");
       }
 
-      const resolvedName = resolveDisplayNameFromLogin(responseData.user, email);
+      const resolvedName = resolveDisplayNameFromLogin(responseUser, email);
       const userToPersist =
-        responseData.user && typeof responseData.user === "object"
+        responseUser && typeof responseUser === "object"
           ? {
-              ...(responseData.user as Record<string, unknown>),
+              ...(responseUser as Record<string, unknown>),
               ...(resolvedName ? { displayName: resolvedName } : {}),
               email,
             }
@@ -123,23 +204,23 @@ export default function Login() {
               ...(resolvedName ? { displayName: resolvedName } : {}),
             };
 
-      await AsyncStorage.multiSet([
-        ["authToken", token],
-        ["@authToken", token],
-        ["user", JSON.stringify(userToPersist)],
-        ["@user", JSON.stringify(userToPersist)],
-      ]);
+      await saveAuthSession(token, userToPersist);
       if (resolvedName) {
-        await AsyncStorage.multiSet([
-          ["displayName", resolvedName],
-          ["@displayName", resolvedName],
-        ]);
+        await saveDisplayName(resolvedName);
       }
 
-      Alert.alert("Sucesso!", responseData.message ?? response.message ?? "Login realizado com sucesso");
+      await clearPendingRegistrationEmail();
+      Alert.alert("Sucesso!", getLoginMessage(response) ?? "Login realizado com sucesso");
       router.replace("/(tabs)/dashboard");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      await apiService.clearAuthSession();
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const pendingRegistrationEmail = await getPendingRegistrationEmail();
+      const normalizedEmail = email.trim().toLowerCase();
+      const message =
+        pendingRegistrationEmail && pendingRegistrationEmail === normalizedEmail
+          ? "Cadastro realizado. Aguarde aprovação do administrador"
+          : resolveLoginErrorMessage(rawMessage);
       Alert.alert("Erro", message);
     } finally {
       setIsLoading(false);

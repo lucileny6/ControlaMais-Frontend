@@ -2,19 +2,7 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
-import {
-  buildMonthlyFinanceSnapshot,
-  normalizeDashboardTransaction,
-  parseTransactionDate,
-} from "@/lib/monthly-finance";
-import {
-  interpretUserMessage,
-  type InterpretedMessage,
-} from "@/lib/interpretador";
-import { AIResponse, AITransactionAction } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { apiService } from "@/services/api";
 import { chatIAService } from "@/services/chatIA";
 import { useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -37,12 +25,6 @@ interface Message {
   content: string;
   isUser: boolean;
   timestamp: Date;
-  sourceLabel?: string;
-}
-
-interface PendingRegistrationDraft {
-  tipo: "income" | "expense";
-  subject: string;
 }
 
 interface User {
@@ -70,8 +52,8 @@ const buildInitialMessages = (name?: string): Message[] => [
 ];
 const getWelcomeMessage = (name?: string) =>
   name
-    ? `Olá, ${name}! 👋 Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?`
-    : "Olá! 👋 Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?";
+    ? `Ola, ${name}! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentacoes. O que deseja fazer?`
+    : "Ola! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentacoes. O que deseja fazer?";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -164,12 +146,6 @@ function getUserFromToken(token: string): User | null {
   return { name: name || undefined, email: resolvedEmail || undefined };
 }
 
-// Legacy helper kept temporarily while the chat flow is being migrated.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function isCancelMessage(normalized: string) {
-  return ["cancelar", "cancela", "nao", "não", "parar", "deixa"].includes(normalized);
-}
-
 export default function ChatPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -179,14 +155,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages());
   const [isLoading, setIsLoading] = useState(false);
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
-  const [pendingAction, setPendingAction] = useState<AITransactionAction | null>(null);
-  const [pendingConfirmationData, setPendingConfirmationData] = useState<Record<string, unknown> | null>(null);
   const [pendingConfirmationMessage, setPendingConfirmationMessage] = useState<string | null>(null);
-  const [pendingRegistrationDraft, setPendingRegistrationDraft] = useState<PendingRegistrationDraft | null>(null);
-  const [displayName, setDisplayName] = useState("");
   const scrollViewRef = useRef<ScrollView>(null);
-  const hasPendingConfirmationData = pendingConfirmationData !== null;
-  const hasStructuredConfirmation = pendingAction !== null || hasPendingConfirmationData;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -232,7 +202,6 @@ export default function ChatPage() {
         resolveUserName(getUserFromToken(token)) ||
         persistedDisplayName;
 
-      setDisplayName(resolvedDisplayName);
       displayNameRef.current = resolvedDisplayName;
 
       setMessages((prev) => {
@@ -257,397 +226,10 @@ export default function ChatPage() {
         setMessages(buildInitialMessages(displayNameRef.current));
         setIsLoading(false);
         setAguardandoConfirmacao(false);
-        setPendingAction(null);
-        setPendingConfirmationData(null);
         setPendingConfirmationMessage(null);
-        setPendingRegistrationDraft(null);
       };
     }, []),
   );
-
-  const addNamePrefix = (message: string) =>
-    displayName ? `${displayName}, ${message.charAt(0).toLowerCase()}${message.slice(1)}` : message;
-
-  const resolveTransactionCategory = (
-    rawCategory: string,
-    transactionType: PendingRegistrationDraft["tipo"] | "income" | "expense",
-  ) => {
-    const normalized = rawCategory
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
-
-    if (transactionType === "income") {
-      if (["salario", "pagamento", "holerite"].some((keyword) => normalized.includes(keyword))) {
-        return "Salário";
-      }
-
-      if (["comissao", "bonus", "bonificacao"].some((keyword) => normalized.includes(keyword))) {
-        return "Comissão";
-      }
-
-      return "Renda extra";
-    }
-
-    if (
-      [
-        "investimento",
-        "investi",
-        "investir",
-        "aporte",
-        "apliquei",
-        "aplicacao",
-        "acoes",
-        "acao",
-        "tesouro",
-        "cdb",
-        "fii",
-        "cripto",
-        "bitcoin",
-      ].some((keyword) => normalized.includes(keyword))
-    ) {
-      return "Investimento";
-    }
-
-    if (
-      [
-        "mercado",
-        "supermercado",
-        "feira",
-        "padaria",
-        "acougue",
-        "açougue",
-        "sacolao",
-        "hortifruti",
-      ].some((keyword) => normalized.includes(keyword))
-    ) {
-      return "Alimentacao";
-    }
-
-    if (["lanche", "restaurante", "ifood", "delivery", "pizza", "hamburguer"].some((keyword) => normalized.includes(keyword))) {
-      return "Restaurante";
-    }
-
-    if (["uber", "99", "onibus", "ônibus", "metro", "metrô", "gasolina", "combustivel", "combustível"].some((keyword) => normalized.includes(keyword))) {
-      return "Transporte";
-    }
-
-    if (["aluguel", "condominio", "condomínio", "agua", "água", "luz", "energia", "internet"].some((keyword) => normalized.includes(keyword))) {
-      return "Moradia";
-    }
-
-    if (["farmacia", "farmácia", "remedio", "remédio", "consulta", "medico", "médico", "plano de saude", "plano de saúde"].some((keyword) => normalized.includes(keyword))) {
-      return "Saude";
-    }
-
-    if (["cinema", "viagem", "show", "bar", "festa", "lazer", "streaming"].some((keyword) => normalized.includes(keyword))) {
-      return "Lazer";
-    }
-
-    return "Outros";
-  };
-
-  const buildActionFromInterpretation = (
-    interpretation: InterpretedMessage,
-    fallbackType?: PendingRegistrationDraft["tipo"],
-    fallbackCategory?: string,
-  ): AITransactionAction | null => {
-    const inferredType =
-      interpretation.intent === "create_income"
-        ? "income"
-        : interpretation.intent === "create_expense"
-        ? "expense"
-        : fallbackType;
-
-    const amount = interpretation.entities.amount;
-    if (!inferredType || amount === undefined || amount <= 0) {
-      return null;
-    }
-
-    const description = String(interpretation.entities.category ?? fallbackCategory ?? "").trim();
-    const category = resolveTransactionCategory(description, inferredType);
-    const label = inferredType === "expense" ? "despesa" : "receita";
-
-    return {
-      tipo: inferredType,
-      valor: amount,
-      categoria: category,
-      descricao: description || `Lancamento de ${label} via chat`,
-      data: normalizeDateValue(interpretation.entities.date),
-    };
-  };
-
-  const buildRegistrationDecision = (interpretation: InterpretedMessage): AIResponse | null => {
-    if (interpretation.intent === "create_transaction") {
-      setPendingRegistrationDraft(null);
-      return {
-        tipo: "TEXTO",
-        mensagem: addNamePrefix(
-          "Claro. Me diga se voce quer registrar uma receita ou uma despesa e informe valor e descricao.",
-        ),
-      };
-    }
-
-    if (interpretation.intent !== "create_expense" && interpretation.intent !== "create_income") {
-      return null;
-    }
-
-    const transactionType = interpretation.intent === "create_income" ? "income" : "expense";
-    const amount = interpretation.entities.amount;
-    const category = String(interpretation.entities.category ?? "").trim();
-    const label = transactionType === "expense" ? "despesa" : "receita";
-    const connector = transactionType === "expense" ? "com" : "de";
-
-    if (amount !== undefined && amount > 0) {
-      const action = buildActionFromInterpretation(interpretation, transactionType, category);
-      if (!action) {
-        return null;
-      }
-
-      const subjectText = category || label;
-      setPendingRegistrationDraft(null);
-      return {
-        tipo: "CONFIRMACAO",
-        mensagem: addNamePrefix(`Confirma ${formatCurrency(amount)} ${connector} ${subjectText}?`),
-        acao: action,
-      };
-    }
-
-    if (category) {
-      setPendingRegistrationDraft({
-        tipo: transactionType,
-        subject: category,
-      });
-      return {
-        tipo: "TEXTO",
-        mensagem: addNamePrefix(`Claro. Qual o valor da ${label} ${connector} ${category}?`),
-      };
-    }
-
-    setPendingRegistrationDraft(null);
-    return {
-      tipo: "TEXTO",
-      mensagem: addNamePrefix(
-        transactionType === "expense"
-          ? 'Claro. Me diga o gasto com valor e descricao, por exemplo: "gastei 15 reais com lanche".'
-          : 'Claro. Me diga a receita com valor e descricao, por exemplo: "recebi 1200 de salario".',
-      ),
-    };
-  };
-
-  const buildPendingDraftDecision = (interpretation: InterpretedMessage): AIResponse | null => {
-    if (!pendingRegistrationDraft) {
-      return null;
-    }
-
-    if (interpretation.intent === "cancel") {
-      setPendingRegistrationDraft(null);
-      return {
-        tipo: "TEXTO",
-        mensagem: addNamePrefix("Tudo bem. Cancelei esse cadastro pelo chat."),
-      };
-    }
-
-    const amount = interpretation.entities.amount;
-    const operationLabel = pendingRegistrationDraft.tipo === "expense" ? "despesa" : "receita";
-    const connector = pendingRegistrationDraft.tipo === "expense" ? "com" : "de";
-
-    if (amount === undefined || amount <= 0) {
-      return {
-        tipo: "TEXTO",
-        mensagem: addNamePrefix(
-          `Ainda preciso do valor da ${operationLabel} ${connector} ${pendingRegistrationDraft.subject}.`,
-        ),
-      };
-    }
-
-    const action = buildActionFromInterpretation(
-      interpretation,
-      pendingRegistrationDraft.tipo,
-      pendingRegistrationDraft.subject,
-    );
-    if (!action) {
-      return null;
-    }
-
-    setPendingRegistrationDraft(null);
-    return {
-      tipo: "CONFIRMACAO",
-      mensagem: addNamePrefix(
-        `Confirma ${formatCurrency(amount)} ${connector} ${pendingRegistrationDraft.subject}?`,
-      ),
-      acao: action,
-    };
-  };
-
-  const buildLocalFinanceReply = async (interpretation: InterpretedMessage): Promise<string | null> => {
-    const intent = interpretation.intent;
-    const isFinanceIntent = [
-      "get_balance",
-      "get_expenses",
-      "get_income",
-      "get_summary",
-      "get_top_expense",
-    ].includes(intent);
-
-    if (!isFinanceIntent) {
-      return null;
-    }
-
-    try {
-      const transactions = await apiService.getTransactions();
-      const normalizedTransactions = (transactions ?? []).map((transaction: any, index: number) =>
-        normalizeDashboardTransaction(transaction, index),
-      );
-      const snapshot = buildMonthlyFinanceSnapshot(normalizedTransactions);
-      const requestedDate = interpretation.entities.date;
-      const currentDate = new Date();
-      const currentDateKey = [
-        currentDate.getFullYear(),
-        String(currentDate.getMonth() + 1).padStart(2, "0"),
-        String(currentDate.getDate()).padStart(2, "0"),
-      ].join("-");
-
-      const filteredTransactions = requestedDate
-        ? normalizedTransactions.filter((transaction) => {
-            const parsedDate = parseTransactionDate(transaction.date);
-            if (!parsedDate) return false;
-            const transactionDate = [
-              parsedDate.getFullYear(),
-              String(parsedDate.getMonth() + 1).padStart(2, "0"),
-              String(parsedDate.getDate()).padStart(2, "0"),
-            ].join("-");
-            return transactionDate === requestedDate;
-          })
-        : snapshot.transactions;
-
-      const filteredIncome = filteredTransactions
-        .filter((transaction) => transaction.type === "income")
-        .reduce((sum, transaction) => sum + transaction.amount, 0);
-      const filteredExpenses = filteredTransactions
-        .filter((transaction) => transaction.type === "expense")
-        .reduce((sum, transaction) => sum + transaction.amount, 0);
-      const filteredBalance = filteredIncome - filteredExpenses;
-      const filteredExpenseTotals = filteredTransactions
-        .filter((transaction) => transaction.type === "expense")
-        .reduce((acc, transaction) => {
-          const category = transaction.category || "Sem categoria";
-          acc.set(category, (acc.get(category) ?? 0) + transaction.amount);
-          return acc;
-        }, new Map<string, number>());
-      const topExpenseCategory = [...filteredExpenseTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-
-      const monthLabel = snapshot.monthDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric",
-      });
-      const specificDateLabel =
-        requestedDate && parseTransactionDate(requestedDate)
-          ? parseTransactionDate(requestedDate)!.toLocaleDateString("pt-BR")
-          : null;
-      const isToday = requestedDate === currentDateKey;
-      const periodReference = isToday
-        ? "hoje"
-        : specificDateLabel
-        ? `em ${specificDateLabel}`
-        : `em ${monthLabel}`;
-
-      if (filteredTransactions.length === 0) {
-        if (intent === "get_income") {
-          return addNamePrefix(`Ainda nao encontrei receitas registradas ${periodReference}.`);
-        }
-
-        if (intent === "get_expenses" || intent === "get_top_expense") {
-          return addNamePrefix(`Ainda nao encontrei despesas registradas ${periodReference}.`);
-        }
-
-        return addNamePrefix(`Ainda nao encontrei lancamentos ${periodReference}.`);
-      }
-
-      if (intent === "get_balance") {
-        return addNamePrefix(`Seu saldo ${periodReference} esta em ${formatCurrency(filteredBalance)}.`);
-      }
-
-      if (intent === "get_income") {
-        return addNamePrefix(`Voce recebeu ${formatCurrency(filteredIncome)} ${periodReference}.`);
-      }
-
-      if (intent === "get_expenses") {
-        return addNamePrefix(`Voce gastou ${formatCurrency(filteredExpenses)} ${periodReference}.`);
-      }
-
-      if (intent === "get_top_expense") {
-        if (!topExpenseCategory) {
-          return addNamePrefix(`Nao encontrei uma categoria de despesa dominante ${periodReference}.`);
-        }
-
-        return addNamePrefix(
-          `A categoria que mais pesou ${periodReference} foi ${topExpenseCategory[0]}, com ${formatCurrency(topExpenseCategory[1])}.`,
-        );
-      }
-
-      const categoryHighlight = topExpenseCategory
-        ? ` A categoria que mais pesou foi ${topExpenseCategory[0]} com ${formatCurrency(topExpenseCategory[1])}.`
-        : "";
-
-      return addNamePrefix(
-        `No periodo consultado, suas receitas somam ${formatCurrency(filteredIncome)}, as despesas ${formatCurrency(filteredExpenses)} e o saldo esta em ${formatCurrency(filteredBalance)}.${categoryHighlight}`,
-      );
-    } catch (error) {
-      console.warn("[Chat] Nao foi possivel montar o resumo financeiro local:", error);
-      return null;
-    }
-  };
-
-  const buildLocalResponse = async (interpretation: InterpretedMessage): Promise<AIResponse | null> => {
-    const draftResponse = buildPendingDraftDecision(interpretation);
-    if (draftResponse) {
-      return draftResponse;
-    }
-
-    const registrationResponse = buildRegistrationDecision(interpretation);
-    if (registrationResponse) {
-      return registrationResponse;
-    }
-
-    const financeReply = await buildLocalFinanceReply(interpretation);
-    if (financeReply) {
-      return {
-        tipo: "TEXTO",
-        mensagem: financeReply,
-      };
-    }
-
-    if (interpretation.intent === "cancel") {
-      return {
-        tipo: "TEXTO",
-        mensagem: addNamePrefix("Tudo bem. Se quiser, podemos tentar novamente."),
-      };
-    }
-
-    return null;
-  };
-
-  const describeResponseSource = (response: AIResponse) => {
-    switch (response.source) {
-      case "backend-api":
-        return {
-          label: "Backend chat",
-          detail: response.sourceNote ?? "Resposta veio do endpoint /api/chat-ia.",
-        };
-      case "webhook":
-        return {
-          label: "Webhook chat",
-          detail: response.sourceNote ?? "Resposta veio do webhook do chat.",
-        };
-      default:
-        return {
-          label: "Front local",
-          detail: "Resposta montada no app sem chamar o endpoint de chat.",
-        };
-    }
-  };
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
@@ -663,44 +245,24 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      const interpretation = interpretUserMessage(content);
-      const localResponse = await buildLocalResponse(interpretation);
-      const response: AIResponse =
-        localResponse
-          ? {
-              ...localResponse,
-              source: "front-local",
-              sourceNote: "Resposta montada no app sem chamar o endpoint de chat.",
-            }
-          : (await chatIAService.sendMessage(content));
-      const responseSource = describeResponseSource(response);
-
-      console.log("[Chat] response origin:", {
-        source: response.source ?? "front-local",
-        detail: responseSource.detail,
-        intent: interpretation.intent,
-        hasAction: Boolean(response.acao ?? response.action),
-      });
+      const response = await chatIAService.sendMessage(content);
 
       const iaMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: response.mensagem,
         isUser: false,
         timestamp: new Date(),
-        sourceLabel: responseSource.label,
       };
 
       setMessages((prev) => [...prev, iaMessage]);
       setAguardandoConfirmacao(response.tipo === "CONFIRMACAO");
-      setPendingConfirmationData(response.dados ?? null);
-      setPendingAction(response.acao ?? response.action ?? null);
       setPendingConfirmationMessage(response.tipo === "CONFIRMACAO" ? response.mensagem : null);
     } catch (error: any) {
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
-          content: String(error?.message ?? "Erro ao comunicar com o workflow do chat."),
+          content: String(error?.message ?? "Erro ao comunicar com o backend do chat."),
           isUser: false,
           timestamp: new Date(),
         },
@@ -710,92 +272,16 @@ export default function ChatPage() {
     }
   };
 
-  const createTransactionFromAction = async (action: AITransactionAction) => {
-    const normalizedType = normalizeTransactionType(action);
-    const payload = {
-      descricao: String(action.descricao ?? action.description ?? "Lancamento via chat").trim(),
-      valor: parseCurrencyValue(action.valor ?? action.amount),
-      categoria: String(action.categoria ?? action.category ?? "Sem categoria").trim(),
-      data: normalizeDateValue(action.data ?? action.date),
-      observacao: "[CHAT] Criado via chat",
-      recorrente: parseBooleanValue(action.recorrente ?? action.recurring),
-      recurring: parseBooleanValue(action.recorrente ?? action.recurring),
-    };
-
-    if (!payload.descricao || payload.valor <= 0 || !payload.categoria || !payload.data) {
-      throw new Error("A resposta do chat nao trouxe dados suficientes para criar o lancamento.");
-    }
-
-    if (normalizedType === "income") {
-      await apiService.createReceita(payload);
-      return "Receita registrada com sucesso pelo chat.";
-    }
-
-    await apiService.createDespesa(payload);
-    return "Despesa registrada com sucesso pelo chat.";
-  };
-
   const confirmar = () => {
     setAguardandoConfirmacao(false);
-    if (!pendingAction) {
-      handleSendMessage("sim");
-      return;
-    }
-
-    appendUserSystemChoice("Confirmar");
-
-    setIsLoading(true);
-    void createTransactionFromAction(pendingAction)
-      .then((message) => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: message,
-            isUser: false,
-            timestamp: new Date(),
-            sourceLabel: "Front local",
-          },
-        ]);
-      })
-      .catch((error: any) => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: String(error?.message ?? "Nao foi possivel registrar o lancamento via chat."),
-            isUser: false,
-            timestamp: new Date(),
-          },
-        ]);
-      })
-      .finally(() => {
-        setPendingAction(null);
-        setPendingConfirmationData(null);
-        setPendingConfirmationMessage(null);
-        setPendingRegistrationDraft(null);
-        setIsLoading(false);
-      });
+    setPendingConfirmationMessage(null);
+    void handleSendMessage("sim");
   };
 
   const cancelar = () => {
     setAguardandoConfirmacao(false);
-    setPendingAction(null);
-    setPendingConfirmationData(null);
     setPendingConfirmationMessage(null);
-    handleSendMessage("cancelar");
-  };
-
-  const appendUserSystemChoice = (content: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${content}`,
-        content,
-        isUser: true,
-        timestamp: new Date(),
-      },
-    ]);
+    void handleSendMessage("cancelar");
   };
 
   return (
@@ -818,151 +304,63 @@ export default function ChatPage() {
                   Converse com o assistente para registrar lancamentos e tirar duvidas financeiras.
                 </Text>
               </View>
-            <KeyboardAvoidingView
-              style={styles.keyboardArea}
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-            >
-              <ScrollView
-                ref={scrollViewRef}
-                style={styles.messagesContainer}
-                contentContainerStyle={styles.messagesContent}
-                onContentSizeChange={() =>
-                  scrollViewRef.current?.scrollToEnd({ animated: true })
-                }
+              <KeyboardAvoidingView
+                style={styles.keyboardArea}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
               >
-                {messages.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    message={msg.content}
-                    isUser={msg.isUser}
-                    timestamp={msg.timestamp}
-                    sourceLabel={msg.sourceLabel}
-                  />
-                ))}
+                <ScrollView
+                  ref={scrollViewRef}
+                  style={styles.messagesContainer}
+                  contentContainerStyle={styles.messagesContent}
+                  onContentSizeChange={() =>
+                    scrollViewRef.current?.scrollToEnd({ animated: true })
+                  }
+                >
+                  {messages.map((msg) => (
+                    <ChatMessage
+                      key={msg.id}
+                      message={msg.content}
+                      isUser={msg.isUser}
+                      timestamp={msg.timestamp}
+                    />
+                  ))}
 
-                {aguardandoConfirmacao && (
-                  <View style={styles.confirmBox}>
-                    <Text style={styles.confirmText}>
-                      {pendingConfirmationMessage ??
-                        (hasStructuredConfirmation
-                          ? "Se estiver tudo certo, confirme para registrar este lancamento."
-                          : "Se a interpretacao estiver correta, confirme para continuar.")}
-                    </Text>
+                  {aguardandoConfirmacao && (
+                    <View style={styles.confirmBox}>
+                      <Text style={styles.confirmText}>
+                        {pendingConfirmationMessage ?? "Se estiver tudo certo, confirme para continuar."}
+                      </Text>
 
-                    <Text style={styles.confirmHint}>
-                      {hasStructuredConfirmation
-                        ? "Ao confirmar, o lancamento sera salvo no seu historico."
-                        : "Ao confirmar, vamos responder 'sim' para a IA continuar o fluxo."}
-                    </Text>
+                      <Text style={styles.confirmHint}>
+                        Sua escolha sera enviada para o backend continuar o fluxo.
+                      </Text>
 
-                    <View style={styles.confirmButtons}>
-                      <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
-                        <Text style={styles.confirmBtnText}>Sim, confirmar</Text>
-                      </TouchableOpacity>
+                      <View style={styles.confirmButtons}>
+                        <TouchableOpacity style={styles.confirmBtn} onPress={confirmar}>
+                          <Text style={styles.confirmBtnText}>Sim, confirmar</Text>
+                        </TouchableOpacity>
 
-                      <TouchableOpacity style={styles.cancelBtn} onPress={cancelar}>
-                        <Text style={styles.cancelBtnText}>Nao, cancelar</Text>
-                      </TouchableOpacity>
+                        <TouchableOpacity style={styles.cancelBtn} onPress={cancelar}>
+                          <Text style={styles.cancelBtnText}>Nao, cancelar</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  )}
 
-                {isLoading && <ActivityIndicator style={{ margin: 16 }} />}
-              </ScrollView>
+                  {isLoading && <ActivityIndicator style={{ margin: 16 }} />}
+                </ScrollView>
 
-              <ChatInput
-                onSendMessage={handleSendMessage}
-                disabled={isLoading || aguardandoConfirmacao}
-              />
-            </KeyboardAvoidingView>
+                <ChatInput
+                  onSendMessage={handleSendMessage}
+                  disabled={isLoading || aguardandoConfirmacao}
+                />
+              </KeyboardAvoidingView>
             </View>
           </View>
         </View>
       </View>
     </LinearGradient>
   );
-}
-
-function normalizeTransactionType(action: AITransactionAction) {
-  const rawType = String(action.tipo ?? action.type ?? "").trim().toLowerCase();
-  return ["receita", "income", "entrada", "ganho"].includes(rawType) ? "income" : "expense";
-}
-
-function parseCurrencyValue(value: string | number | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value !== "string") {
-    return 0;
-  }
-
-  const raw = value.trim();
-  if (!raw) {
-    return 0;
-  }
-
-  const cleaned = raw.replace(/[^\d,.-]/g, "");
-  const hasComma = cleaned.includes(",");
-  const hasDot = cleaned.includes(".");
-
-  if (hasComma && hasDot) {
-    const lastComma = cleaned.lastIndexOf(",");
-    const lastDot = cleaned.lastIndexOf(".");
-    const normalized =
-      lastComma > lastDot
-        ? cleaned.replace(/\./g, "").replace(",", ".")
-        : cleaned.replace(/,/g, "");
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  if (hasComma) {
-    const parsed = Number(cleaned.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function parseBooleanValue(value: boolean | string | undefined) {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  return ["true", "1", "sim", "yes"].includes(value.trim().toLowerCase());
-}
-
-function normalizeDateValue(value: string | undefined) {
-  if (!value) {
-    return new Date().toISOString().split("T")[0];
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return new Date().toISOString().split("T")[0];
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-    const [day, month, year] = trimmed.split("/");
-    return `${year}-${month}-${day}`;
-  }
-
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) {
-    return new Date().toISOString().split("T")[0];
-  }
-
-  return parsed.toISOString().split("T")[0];
 }
 
 const styles = StyleSheet.create({
@@ -1000,7 +398,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "800",
     color: "#10233f",
-    letterSpacing: -0.8,
+    letterSpacing: 0,
   },
   pageSubtitle: {
     marginTop: 8,

@@ -37,6 +37,7 @@ CATEGORIAS
 ============================== */
 
 const incomeCategories = ["Salário", "Comissão", "Renda extra"];
+incomeCategories.push("Rendimento de Investimento");
 
 const expenseCategories = [
   "Investimento",
@@ -79,6 +80,23 @@ expenseCategories.splice(
   "Tecnologia",
   "Outros",
 );
+
+const normalizeIncomeCategoryLabel = (value: string) => {
+  const normalized = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (normalized.includes("sal")) {
+    return "Sal\u00e1rio";
+  }
+
+  if (normalized.includes("comiss") || normalized.includes("comi")) {
+    return "Comiss\u00e3o";
+  }
+
+  return value;
+};
 
 /* ==============================
    COMPONENTE
@@ -149,7 +167,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const categories =
     formData.type === "income"
-      ? incomeCategories
+      ? incomeCategories.map(normalizeIncomeCategoryLabel)
       : expenseCategories;
   const handleExitCategoryPicker = () => {
     setShowCategoryPicker(false);
@@ -187,7 +205,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       description: formData.description,
       amount,
       type: formData.type,
-      category: formData.category,
+      category: formData.type === "income" ? normalizeIncomeCategoryLabel(formData.category) : formData.category,
       date: formData.date,
       notes: formData.notes,
       recorrente: formData.recorrente,
@@ -250,7 +268,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             onPress={() => setShowCategoryPicker(true)}
           >
             <Text style={styles.selectValue}>
-              {formData.category || "Selecione uma categoria"}
+              {(formData.type === "income" ? normalizeIncomeCategoryLabel(formData.category) : formData.category) ||
+                "Selecione uma categoria"}
             </Text>
             <Text style={styles.selectArrow}>▼</Text>
           </TouchableOpacity>

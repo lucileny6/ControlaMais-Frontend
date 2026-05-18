@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { AIResponse, LoginResponse, User as AuthUser } from "@/lib/types";
+import { LoginResponse, User as AuthUser } from "@/lib/types";
 
 
 /* =====================================================
@@ -22,6 +22,15 @@ export interface User {
 
 export interface AuthResponse extends Omit<LoginResponse, "user"> {
   user?: AuthUser;
+}
+
+export interface PendingUser {
+  id: string | number;
+  name?: string;
+  nome?: string;
+  username: string;
+  email: string;
+  aprovado?: boolean;
 }
 
 // ===== RECEITA =====
@@ -114,9 +123,20 @@ export interface UpdateMetaDTO {
 export class ApiService {
   private baseUrl = resolveApiBaseUrl();
 
-  private typeSafeRequestOptions(options: RequestInit & { preserveSessionOnAuthError?: boolean }) {
-    const { preserveSessionOnAuthError, ...requestOptions } = options;
-    return { preserveSessionOnAuthError: Boolean(preserveSessionOnAuthError), requestOptions };
+  private typeSafeRequestOptions(
+    options: RequestInit & {
+      preserveSessionOnAuthError?: boolean;
+      skipAuth?: boolean;
+      suppressAuthRedirect?: boolean;
+    },
+  ) {
+    const { preserveSessionOnAuthError, skipAuth, suppressAuthRedirect, ...requestOptions } = options;
+    return {
+      preserveSessionOnAuthError: Boolean(preserveSessionOnAuthError),
+      skipAuth: Boolean(skipAuth),
+      suppressAuthRedirect: Boolean(suppressAuthRedirect),
+      requestOptions,
+    };
   }
 
   private buildTransactionEndpoints(
@@ -170,14 +190,19 @@ export class ApiService {
   
   private async request<T>(
     endpoint: string,
-    options: (RequestInit & { preserveSessionOnAuthError?: boolean }) = {}
+    options: (RequestInit & {
+      preserveSessionOnAuthError?: boolean;
+      skipAuth?: boolean;
+      suppressAuthRedirect?: boolean;
+    }) = {}
   ): Promise<T> {
-    const { preserveSessionOnAuthError, requestOptions } = this.typeSafeRequestOptions(options);
+    const { preserveSessionOnAuthError, skipAuth, suppressAuthRedirect, requestOptions } =
+      this.typeSafeRequestOptions(options);
     const [plainToken, scopedToken] = await Promise.all([
       AsyncStorage.getItem("authToken"),
       AsyncStorage.getItem("@authToken"),
     ]);
-    const authToken = plainToken || scopedToken;
+    const authToken = skipAuth ? "" : plainToken || scopedToken;
     const method = requestOptions.method ?? "GET";
     console.log(`[API] ${method} ${endpoint} auth token present:`, Boolean(authToken));
 
@@ -203,27 +228,32 @@ export class ApiService {
       console.log(`[API] ${method} ${endpoint} error body:`, error);
 
       if (response.status === 401 || response.status === 403) {
-        if (preserveSessionOnAuthError) {
+        if (skipAuth || preserveSessionOnAuthError) {
           throw new Error(error?.message || `Erro ${response.status} em ${method} ${endpoint}`);
         }
 
-        await AsyncStorage.multiRemove([
-          "authToken",
-          "user",
-          "displayName",
-          "@authToken",
-          "@user",
-          "@displayName",
-        ]);
+        await clearStoredAuthSession();
 
         const webEnv = globalThis as { location?: { pathname?: string; assign?: (url: string) => void } };
-        if (webEnv.location && webEnv.location.pathname !== "/login") {
+        if (!suppressAuthRedirect && webEnv.location && webEnv.location.pathname !== "/login") {
+          webEnv.location.assign?.("/login");
+        }
+
+        throw new Error(error?.message || "Sessao expirada ou sem permissao. Faca login novamente.");
+      }
+      /*
+        if (false && skipAuth && endpoint === "/users/login") {
+          throw new Error(error?.message ? `Erro ${response.status}: ${error.message}` : `Erro ${response.status} em POST /users/login`);
+        }
+
+        const webEnv = globalThis as { location?: { pathname?: string; assign?: (url: string) => void } };
+        if (false && !suppressAuthRedirect && webEnv.location && webEnv.location.pathname !== "/login") {
           webEnv.location.assign?.("/login");
         }
 
         throw new Error(error?.message || "Sessao expirada ou sem permissao. Faça login novamente.");
-      }
-
+      
+      */
       throw new Error(error?.message || `Erro ${response.status} em ${method} ${endpoint}`);
     }
 
@@ -245,10 +275,16 @@ export class ApiService {
 
   /* AUTH */
 
+  async clearAuthSession() {
+    await clearStoredAuthSession();
+  }
+
   async login(email: string, password: string): Promise<AuthResponse> {
     return this.request<AuthResponse>("/users/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+      skipAuth: true,
+      suppressAuthRedirect: true,
     });
   }
 
@@ -256,18 +292,35 @@ export class ApiService {
     return this.request<AuthResponse>("/users/register", {
       method: "POST",
       body: JSON.stringify({ username: name, email, password }),
+      skipAuth: true,
+      suppressAuthRedirect: true,
     });
   }
 
   async logout() {
-    await AsyncStorage.multiRemove([
-      "authToken",
-      "user",
-      "displayName",
-      "@authToken",
-      "@user",
-      "@displayName",
-    ]);
+    await this.clearAuthSession();
+  }
+
+  async getPendingUsers(): Promise<PendingUser[]> {
+    const response = await this.request<any>("/users/pendentes");
+    const payload = response?.data ?? response;
+    const list = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.pendentes)
+        ? payload.pendentes
+        : Array.isArray(payload?.users)
+          ? payload.users
+          : Array.isArray(payload?.usuarios)
+            ? payload.usuarios
+            : [];
+
+    return list.filter((item: PendingUser) => item?.aprovado !== true);
+  }
+
+  async approveUser(id: string | number): Promise<void> {
+    return this.request<void>(`/users/${id}/aprovar`, {
+      method: "PUT",
+    });
   }
 
   /* RECEITA / DESPESA */
@@ -350,7 +403,7 @@ export class ApiService {
   
 
   async getDashboard(): Promise<DashboardDTO> {
-    const response = await this.request<any>("/dashboard");
+    const response = await this.request<any>("/dashboard", { preserveSessionOnAuthError: true });
     console.log("[API] GET /dashboard raw:", response);
 
     const payload = response?.data ?? response ?? {};
@@ -396,7 +449,7 @@ export class ApiService {
   }
 
   
-  async getTransactions(): Promise<any[]> {
+  async getTransactions(options: { preserveSessionOnAuthError?: boolean } = {}): Promise<any[]> {
     const extractList = (response: any) => {
       const payload = response?.data ?? response;
       if (Array.isArray(payload)) return payload;
@@ -435,8 +488,15 @@ export class ApiService {
       const directCandidates = [
         payload?.transacoes,
         payload?.transactions,
+        payload?.lancamentos,
+        payload?.registros,
+        payload?.acoesFinanceiras,
+        payload?.acoes_financeiras,
+        payload?.financialActions,
         payload?.content,
         payload?.items,
+        payload?.results,
+        payload?.result,
       ];
       for (const candidate of directCandidates) {
         if (Array.isArray(candidate)) return candidate;
@@ -458,10 +518,176 @@ export class ApiService {
       return [];
     };
 
+    const normalizeFinancialAction = (item: any) => {
+      if (!item || typeof item !== "object") {
+        return item;
+      }
+
+      const source = item?.acaoFinanceira ?? item?.acao ?? item?.transaction ?? item?.transacao ?? item;
+      const rawType = String(
+        source?.tipoTransacao ??
+          source?.tipoLancamento ??
+          source?.tipoMovimentacao ??
+          source?.natureza ??
+          source?.transactionType ??
+          source?.type ??
+          source?.tipo ??
+          item?.tipoTransacao ??
+          item?.tipoLancamento ??
+          item?.tipoMovimentacao ??
+          item?.natureza ??
+          item?.transactionType ??
+          item?.type ??
+          item?.tipo ??
+          "",
+      )
+        .toLowerCase()
+        .trim();
+      const normalizedType =
+        rawType.includes("receita") ||
+        rawType.includes("income") ||
+        rawType.includes("entrada") ||
+        rawType.includes("ganho")
+          ? "income"
+          : "expense";
+
+      return {
+        ...item,
+        id:
+          source?.id ??
+          source?._id ??
+          source?.acaoFinanceiraId ??
+          source?.idAcaoFinanceira ??
+          item?.id ??
+          item?._id,
+        type: normalizedType,
+        tipo: normalizedType === "income" ? "receita" : "despesa",
+        valor:
+          source?.valor ??
+          source?.amount ??
+          source?.value ??
+          source?.preco ??
+          source?.valorTransacao ??
+          source?.valorLancamento ??
+          source?.valorEstimado ??
+          item?.valor ??
+          item?.amount,
+        descricao:
+          source?.descricao ??
+          source?.description ??
+          source?.titulo ??
+          source?.nome ??
+          source?.mensagem ??
+          source?.texto ??
+          item?.descricao ??
+          item?.description,
+        categoria:
+          source?.categoria ??
+          source?.category ??
+          source?.grupo ??
+          source?.classificacao ??
+          item?.categoria ??
+          item?.category,
+        data:
+          source?.data ??
+          source?.date ??
+          source?.dataTransacao ??
+          source?.dataLancamento ??
+          source?.dataDespesa ??
+          source?.dataReceita ??
+          source?.createdAt ??
+          item?.data ??
+          item?.date ??
+          item?.createdAt,
+        observacao:
+          source?.observacao ??
+          source?.notes ??
+          item?.observacao ??
+          item?.notes ??
+          "[CHAT] Lancamento via chat",
+      };
+    };
+
+    const mergeTransactions = (...groups: any[][]) => {
+      const seen = new Set<string>();
+      const merged: any[] = [];
+
+      for (const group of groups) {
+        for (const item of group) {
+          const rawType = String(
+            item?.type ??
+              item?.tipo ??
+              item?.transactionType ??
+              item?.natureza ??
+              item?.acaoFinanceira?.type ??
+              item?.acaoFinanceira?.tipo ??
+              "",
+          )
+            .toLowerCase()
+            .trim();
+          const rawId = String(
+            item?.id ??
+              item?._id ??
+              item?.transactionId ??
+              item?.transacaoId ??
+              item?.acaoFinanceiraId ??
+              item?.idAcaoFinanceira ??
+              item?.acaoFinanceira?.id ??
+              item?.acaoFinanceira?._id ??
+              "",
+          ).trim();
+          const signature = rawId
+            ? `${rawType || "unknown"}:${rawId}`
+            : JSON.stringify({
+                type: rawType,
+                descricao: item?.descricao ?? item?.description,
+                valor: item?.valor ?? item?.amount,
+                data: item?.data ?? item?.date,
+              });
+
+          if (seen.has(signature)) continue;
+          seen.add(signature);
+          merged.push(item);
+        }
+      }
+
+      return merged;
+    };
+
+    const getFinancialActions = async () => {
+      const endpoints: string[] = [];
+      const extractedGroups: any[][] = [];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await this.request<any>(endpoint, {
+            preserveSessionOnAuthError: options.preserveSessionOnAuthError,
+          });
+          const extracted = extractList(response).map(normalizeFinancialAction);
+          if (extracted.length > 0) {
+            extractedGroups.push(extracted);
+          }
+          console.log(`[API] GET ${endpoint} extracted:`, extracted);
+        } catch (error) {
+          const message = String((error as any)?.message ?? "");
+          if (message.includes("403") || message.includes("401") || message.toLowerCase().includes("sessao")) {
+            throw error;
+          }
+          console.log(`[API] GET ${endpoint} unavailable:`, error);
+        }
+      }
+
+      return mergeTransactions(...extractedGroups);
+    };
+
     try {
-      const response = await this.request<any>("/transacoes");
+      const response = await this.request<any>("/transacoes", {
+        preserveSessionOnAuthError: options.preserveSessionOnAuthError,
+      });
       console.log("[API] GET /transacoes raw:", response);
       const extracted = extractList(response);
+      const financialActions = await getFinancialActions();
+      const merged = mergeTransactions(extracted, financialActions);
       console.log("[API] GET /transacoes extracted recurring fields:", extracted.map((item: any) => ({
         id: item?.id ?? item?._id ?? item?.transactionId,
         descricao: item?.descricao ?? item?.description,
@@ -470,16 +696,20 @@ export class ApiService {
         isRecurring: item?.isRecurring,
         recorrencia: item?.recorrencia,
       })));
-      return extracted;
+      return merged;
     } catch (error) {
       const message = String((error as any)?.message ?? "");
       if (message.includes("403") || message.includes("401") || message.toLowerCase().includes("sessao")) {
         throw error;
       }
       console.log("[API] GET /transacoes failed, trying /transaction:", error);
-      const response = await this.request<any>("/transaction");
+      const response = await this.request<any>("/transaction", {
+        preserveSessionOnAuthError: options.preserveSessionOnAuthError,
+      });
       console.log("[API] GET /transaction raw:", response);
       const extracted = extractList(response);
+      const financialActions = await getFinancialActions();
+      const merged = mergeTransactions(extracted, financialActions);
       console.log("[API] GET /transaction extracted recurring fields:", extracted.map((item: any) => ({
         id: item?.id ?? item?._id ?? item?.transactionId,
         descricao: item?.descricao ?? item?.description,
@@ -488,7 +718,7 @@ export class ApiService {
         isRecurring: item?.isRecurring,
         recorrencia: item?.recorrencia,
       })));
-      return extracted;
+      return merged;
     }
   }
 
@@ -615,7 +845,7 @@ export class ApiService {
     });
   }
 
-  async sendChatIA(message: string): Promise<AIResponse> {
+  async sendChatIA(message: string): Promise<unknown> {
     const payload = JSON.stringify({
       mensagem: message,
     });
@@ -632,7 +862,7 @@ export class ApiService {
 
     for (const endpoint of endpoints) {
       try {
-        return await this.request<AIResponse>(endpoint, {
+        return await this.request<unknown>(endpoint, {
           method: "POST",
           body: payload,
         });
@@ -653,6 +883,33 @@ export class ApiService {
 ===================================================== */
 
 export const apiService = new ApiService();
+
+const AUTH_STORAGE_KEYS = [
+  "authToken",
+  "user",
+  "displayName",
+  "@authToken",
+  "@user",
+  "@displayName",
+];
+
+async function clearStoredAuthSession() {
+  await AsyncStorage.multiRemove(AUTH_STORAGE_KEYS);
+
+  const webStorage = globalThis as {
+    localStorage?: Storage;
+    sessionStorage?: Storage;
+  };
+
+  for (const key of AUTH_STORAGE_KEYS) {
+    try {
+      webStorage.localStorage?.removeItem(key);
+      webStorage.sessionStorage?.removeItem(key);
+    } catch {
+      // Web storage can be unavailable in private modes or native runtimes.
+    }
+  }
+}
 
 function resolveApiBaseUrl() {
   const webBaseUrl =

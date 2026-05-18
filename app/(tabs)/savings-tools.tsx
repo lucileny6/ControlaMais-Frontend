@@ -19,6 +19,10 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  buildMonthlyFinanceSnapshot,
+  normalizeDashboardTransaction
+} from "@/lib/monthly-finance";
 
 interface Transaction {
   id: string;
@@ -31,9 +35,55 @@ interface Transaction {
 
 type EstadoFinanceiro = Record<string, number>;
 
+const calculateExpenseRatePercent = (totalIncome: number, totalExpenses: number) => {
+  if (totalIncome > 0) {
+    return (totalExpenses / totalIncome) * 100;
+  }
+
+  return totalExpenses > 0 ? 100 : 0;
+};
+
+function parseMonetaryValue(value: unknown): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const cleaned = value.trim().replace(/[^\d,.-]/g, "");
+
+  if (!cleaned) {
+    return 0;
+  }
+
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+
+    const normalized =
+      lastComma > lastDot
+        ? cleaned.replace(/\./g, "").replace(",", ".")
+        : cleaned.replace(/,/g, "");
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  const parsed = Number(
+    cleaned.includes(",")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned
+  );
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 const DASHBOARD_GRADIENT = ["#F8FBFD", "#EEF4F7", "#E8F0F4", "#E2EBF1"] as const;
 
 function getFinancialStatus(totalIncome: number, totalExpenses: number) {
+  
   if (totalIncome <= 0) {
     return totalExpenses > 0
       ? {
@@ -100,11 +150,15 @@ export default function SavingsToolsPage() {
   const [monthLabel, setMonthLabel] = useState("");
   const [suggestions, setSuggestions] = useState<SavingSuggestionItem[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
+  const [financialStatus, setFinancialStatus] = useState(
+  getFinancialStatus(0, 0)
+  );
+  const [expenseRatePercent, setExpenseRatePercent] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [expenseLimit, setExpenseLimit] = useState(0);
   const [totalPotentialSavings, setTotalPotentialSavings] = useState(0);
   const [transactionCount, setTransactionCount] = useState(0);
-  const financialStatus = getFinancialStatus(totalIncome, totalExpenses);
+  
 
   useEffect(() => {
     void checkAuthentication();
@@ -203,46 +257,36 @@ export default function SavingsToolsPage() {
         new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 8000)),
       ]);
 
-      const normalized: Transaction[] = (data ?? []).map((transaction: any, index: number) => ({
-        id: String(transaction?.id ?? transaction?._id ?? index),
-        description: String(transaction?.description ?? transaction?.descricao ?? "Sem descricao"),
-        amount: Number(transaction?.amount ?? transaction?.valor ?? transaction?.value ?? 0),
-        type: (() => {
-          const rawType = String(transaction?.type ?? transaction?.tipo ?? "").toLowerCase().trim();
-          if (rawType === "income" || rawType === "icome" || rawType === "receita" || rawType === "entrada") {
-            return "income";
-          }
-
-          if (rawType === "ia") {
-            return "ia";
-          }
-
-          return "expense";
-        })(),
-        category: String(transaction?.category ?? transaction?.categoria ?? "Sem categoria"),
-        date: String(transaction?.date ?? transaction?.data ?? new Date().toISOString()),
-      }));
+     const normalized = (data ?? []).map((transaction: any, index: number) =>
+     normalizeDashboardTransaction(transaction, index)
+      );
 
       const selected = parseMonthYear(monthReference)?.labelDate ?? new Date();
-      const monthTransactions = normalized.filter((transaction) => {
+      const monthTransactions = normalized.filter((transaction: Transaction) => {
+       
         const parsedDate = parseTransactionDate(transaction.date);
-        return !!parsedDate && parsedDate.getMonth() === selected.getMonth() && parsedDate.getFullYear() === selected.getFullYear();
+        return (!!parsedDate && parsedDate.getMonth() === selected.getMonth() && parsedDate.getFullYear() === selected.getFullYear()
+      );
       });
+      const snapshot = buildMonthlyFinanceSnapshot(
+      normalized,
+      selected
+      );
+      const income = snapshot.totalIncome;
+      const expenses = snapshot.totalExpenses;
+      const currentExpenseRatePercent = calculateExpenseRatePercent(income, expenses);
+      const currentFinancialStatus = getFinancialStatus(
+       income,
+       expenses
+      );
+      const expensesByCategory = snapshot.transactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce<EstadoFinanceiro>((acc, transaction) => {
+      acc[transaction.category] =
+      (acc[transaction.category] ?? 0) + transaction.amount;
 
-      const income = monthTransactions
-        .filter((transaction) => transaction.type === "income")
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
-
-      const expenses = monthTransactions
-        .filter((transaction) => transaction.type === "expense")
-        .reduce((acc, transaction) => acc + transaction.amount, 0);
-
-      const expensesByCategory = monthTransactions
-        .filter((transaction) => transaction.type === "expense")
-        .reduce<EstadoFinanceiro>((acc, transaction) => {
-          acc[transaction.category] = (acc[transaction.category] ?? 0) + transaction.amount;
-          return acc;
-        }, {});
+      return acc;
+      }, {});
 
       const aiSuggestions = runFinancialAnalysis(expensesByCategory, income, expenses);
       const suggestionCards: SavingSuggestionItem[] = aiSuggestions.map((item) => {
@@ -264,14 +308,17 @@ export default function SavingsToolsPage() {
       setSuggestions(suggestionCards);
       setTotalIncome(income);
       setTotalExpenses(expenses);
+      setExpenseRatePercent(currentExpenseRatePercent);
+      setFinancialStatus(currentFinancialStatus);
       setExpenseLimit(income * 0.6);
       setTotalPotentialSavings(suggestionCards.reduce((sum, item) => sum + item.potentialSavings, 0));
-      setTransactionCount(monthTransactions.length);
+      setTransactionCount(snapshot.transactions.length);
     } catch (error) {
       console.error("Erro ao carregar sugestoes de economia:", error);
       setSuggestions([]);
       setTotalIncome(0);
       setTotalExpenses(0);
+      setExpenseRatePercent(0);
       setExpenseLimit(0);
       setTotalPotentialSavings(0);
       setTransactionCount(0);
@@ -359,7 +406,7 @@ export default function SavingsToolsPage() {
                       {financialStatus.label}
                     </Text>
                     <Text style={styles.statHint}>
-                      Gasto atual: {(financialStatus.expenseRate * 100).toFixed(1)}% da receita.
+                      Gasto atual: {expenseRatePercent.toFixed(1).replace(".", ",")}% da receita.
                     </Text>
                     <Text style={styles.statusDescription}>{financialStatus.description}</Text>
                   </View>

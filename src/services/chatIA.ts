@@ -1,179 +1,19 @@
 import { AIResponse, AITransactionAction } from "@/lib/types";
 import { apiService } from "@/services/api";
 
-const DEFAULT_CHAT_WEBHOOK_URL = "http://localhost:5678/webhook/chat-financeiro";
-
-const CHAT_WEBHOOK_URL =
-  process.env.EXPO_PUBLIC_CHAT_FINANCEIRO_WEBHOOK_URL ??
-  process.env.EXPO_PUBLIC_CHAT_WEBHOOK_URL ??
-  process.env.EXPO_PUBLIC_N8N_CHAT_WEBHOOK_URL ??
-  process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL ??
-  DEFAULT_CHAT_WEBHOOK_URL;
-const CHAT_PROVIDER = (process.env.EXPO_PUBLIC_CHAT_PROVIDER ?? "backend").trim().toLowerCase();
-
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export const chatIAService = {
   async sendMessage(message: string): Promise<AIResponse> {
-    if (CHAT_PROVIDER === "backend") {
-      return sendViaBackend(message);
-    }
-
-    if (CHAT_PROVIDER === "webhook") {
-      return sendViaWebhook(message);
-    }
-
-    return sendWithFallback(message);
+    return sendViaBackend(message);
   },
 };
 
-async function sendWithFallback(message: string): Promise<AIResponse> {
-  try {
-    return await sendViaWebhook(message);
-  } catch (webhookError: any) {
-    try {
-      return await sendViaBackend(message);
-    } catch (backendError: any) {
-      const webhookMessage = String(webhookError?.message ?? "Falha no webhook");
-      const backendMessage = String(backendError?.message ?? "Falha no backend");
-      throw new Error(`Nao foi possivel consultar o chat pelo workflow nem pelo backend. Workflow: ${webhookMessage}. Backend: ${backendMessage}.`);
-    }
-  }
-}
-
 async function sendViaBackend(message: string): Promise<AIResponse> {
   const response = await apiService.sendChatIA(message);
-  const normalizedResponse = normalizeAIResponse(response as JsonValue);
-  return {
-    ...normalizedResponse,
-    source: "backend-api",
-    sourceNote: "Resposta veio do endpoint de chat do backend. O uso da IA aqui e inferido pelo fluxo do backend.",
-  };
-}
 
-async function sendViaWebhook(message: string): Promise<AIResponse> {
-  const payload = JSON.stringify({
-    texto: message,
-  });
-
-  const candidateUrls = buildWebhookCandidates(CHAT_WEBHOOK_URL);
-  const attemptErrors: string[] = [];
-
-  for (const url of candidateUrls) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: payload,
-      });
-
-      const responseText = await response.text();
-      const parsedResponse = responseText ? safeParseJson(responseText) : null;
-
-      if (!response.ok) {
-        const message = extractErrorMessage(parsedResponse, response.status);
-
-        if (response.status === 404 && candidateUrls.length > 1) {
-          attemptErrors.push(`${url} -> ${message}`);
-          continue;
-        }
-
-        throw new Error(message);
-      }
-
-      return {
-        ...normalizeAIResponse(parsedResponse),
-        source: "webhook",
-        sourceNote: "Resposta veio do webhook do chat. O uso da IA depende do fluxo configurado no n8n.",
-      };
-    } catch (error: any) {
-      const message = formatWebhookFetchError(url, error);
-      attemptErrors.push(`${url} -> ${message}`);
-
-      if (url !== candidateUrls[candidateUrls.length - 1]) {
-        continue;
-      }
-    }
-  }
-
-  throw new Error(buildWebhookFailureMessage(candidateUrls, attemptErrors));
-}
-
-function buildWebhookCandidates(primaryUrl: string) {
-  const candidates = [primaryUrl];
-
-  if (primaryUrl.includes("/webhook-test/")) {
-    candidates.push(primaryUrl.replace("/webhook-test/", "/webhook/"));
-  } else if (primaryUrl.includes("/webhook/")) {
-    candidates.push(primaryUrl.replace("/webhook/", "/webhook-test/"));
-  }
-
-  return Array.from(new Set(candidates));
-}
-
-function buildWebhookFailureMessage(candidateUrls: string[], errors: string[]) {
-  const triedTestWebhook = candidateUrls.some((url) => url.includes("/webhook-test/"));
-  const hasLocalhostUrl = candidateUrls.some((url) => url.includes("localhost") || url.includes("127.0.0.1"));
-  const missingTestListener = errors.some((item) => item.includes("/webhook-test/") && item.includes("erro 404"));
-  const networkFetchFailed = errors.some((item) => {
-    const normalized = item.toLowerCase();
-    return normalized.includes("failed to fetch") || normalized.includes("network request failed");
-  });
-
-  if (missingTestListener) {
-    return "O endpoint de teste do n8n nao estava ouvindo. No n8n, /webhook-test so responde enquanto o workflow estiver em 'Listen for Test Event'.";
-  }
-
-  if (networkFetchFailed && hasLocalhostUrl) {
-    return "Nao foi possivel acessar o workflow em localhost. Se voce estiver testando no celular ou emulador, troque 'localhost' pelo IP da maquina que roda o n8n.";
-  }
-
-  if (triedTestWebhook && errors.length > 0) {
-    return `Nao foi possivel consultar o workflow do chat. Tentativas: ${errors.join(" | ")}`;
-  }
-
-  return "Nao foi possivel consultar o workflow do chat.";
-}
-
-function formatWebhookFetchError(url: string, error: unknown) {
-  const message = String((error as any)?.message ?? error ?? "Falha ao acessar o webhook");
-  if (
-    (message.toLowerCase().includes("failed to fetch") ||
-      message.toLowerCase().includes("network request failed")) &&
-    (url.includes("localhost") || url.includes("127.0.0.1"))
-  ) {
-    return "falha de rede ao acessar localhost";
-  }
-
-  return message;
-}
-
-function safeParseJson(value: string): JsonValue {
-  try {
-    return JSON.parse(value) as JsonValue;
-  } catch {
-    return value;
-  }
-}
-
-function extractErrorMessage(payload: JsonValue, status: number) {
-  if (typeof payload === "string" && payload.trim()) {
-    return payload;
-  }
-
-  const record = asRecord(unwrapPayload(payload));
-  if (record) {
-    const candidate = pickString(record, ["message", "mensagem", "error", "erro", "detail"]);
-    if (candidate) {
-      return candidate;
-    }
-  }
-
-  return `O webhook respondeu com erro ${status}.`;
+  return normalizeAIResponse(response as JsonValue);
 }
 
 function normalizeAIResponse(payload: JsonValue): AIResponse {
@@ -190,7 +30,7 @@ function normalizeAIResponse(payload: JsonValue): AIResponse {
   if (!record) {
     return {
       tipo: "TEXTO",
-      mensagem: "O workflow respondeu sem uma mensagem valida.",
+      mensagem: "O backend respondeu sem uma mensagem valida.",
     };
   }
 
@@ -200,10 +40,11 @@ function normalizeAIResponse(payload: JsonValue): AIResponse {
   const action = actionRecord ? normalizeAction(actionRecord) ?? undefined : undefined;
   const inferredType = action ? "CONFIRMACAO" : "TEXTO";
   const tipo = normalizeResponseType(explicitType, inferredType);
-  const mensagem = pickString(record, ["mensagem"]) ??
+  const mensagem =
+    pickString(record, ["mensagem"]) ??
     (tipo === "CONFIRMACAO"
       ? "Encontrei dados para confirmar. Deseja continuar?"
-      : "Recebi sua mensagem, mas o workflow nao retornou um texto de resposta.");
+      : "Recebi sua mensagem, mas o backend nao retornou um texto de resposta.");
 
   return dados || action
     ? {
@@ -360,7 +201,7 @@ function normalizeResponseType(
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return fallback;
 
-  if (["confirmacao", "confirmação", "confirm", "confirmation"].includes(normalized)) {
+  if (["confirmacao", "confirm", "confirmation"].includes(normalized)) {
     return "CONFIRMACAO";
   }
 
@@ -426,7 +267,7 @@ function pickBooleanLike(record: Record<string, JsonValue>, keys: string[]) {
       return true;
     }
 
-    if (["false", "0", "nao", "não", "no"].includes(normalized)) {
+    if (["false", "0", "nao", "no"].includes(normalized)) {
       return false;
     }
   }

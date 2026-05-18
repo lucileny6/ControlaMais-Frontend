@@ -1,4 +1,4 @@
-import { isInvestmentCategory } from "@/lib/investments";
+import { isInvestmentCategory, isInvestmentYieldCategory } from "@/lib/investments";
 import { parseTransactionDate } from "@/lib/monthly-finance";
 import { DashboardTransaction } from "@/lib/types";
 
@@ -8,6 +8,7 @@ type ExportFinancialPdfParams = {
   totalIncome: number;
   totalExpense: number;
   totalInvestment?: number;
+  totalInvestmentYield?: number;
   balance: number;
   title?: string;
   typeLabel?: string;
@@ -60,6 +61,7 @@ export function exportFinancialPdf({
   totalIncome,
   totalExpense,
   totalInvestment = 0,
+  totalInvestmentYield = 0,
   balance,
   title = "RELATORIO FINANCEIRO",
   typeLabel = "Todos",
@@ -111,7 +113,10 @@ export function exportFinancialPdf({
   }
 
   const incomeTransactions = sortByDateDesc(
-    transactions.filter((transaction) => transaction.type === "income"),
+    transactions.filter(
+      (transaction) =>
+        transaction.type === "income" && !isInvestmentYieldCategory(transaction.category),
+    ),
   );
   const expenseTransactions = sortByDateDesc(
     transactions.filter(
@@ -123,6 +128,12 @@ export function exportFinancialPdf({
     transactions.filter(
       (transaction) =>
         transaction.type === "expense" && isInvestmentCategory(transaction.category),
+    ),
+  );
+  const investmentYieldTransactions = sortByDateDesc(
+    transactions.filter(
+      (transaction) =>
+        transaction.type === "income" && isInvestmentYieldCategory(transaction.category),
     ),
   );
 
@@ -146,6 +157,10 @@ export function exportFinancialPdf({
     const label = transaction.description || normalizeCategory(transaction.category);
     return `- ${label}: R$ ${compactCurrency(transaction.amount)}`;
   });
+  const investmentYieldRows = investmentYieldTransactions.map((transaction) => {
+    const label = transaction.description || normalizeCategory(transaction.category);
+    return `- ${label}: R$ ${compactCurrency(transaction.amount)}`;
+  });
 
   const lines = [
     title,
@@ -164,6 +179,9 @@ export function exportFinancialPdf({
     `TOTAL DE INVESTIMENTOS: R$ ${compactCurrency(totalInvestment)}`,
     ...(investmentRows.length > 0 ? ["Investimentos no periodo:"] : []),
     ...investmentRows,
+    `TOTAL RENDIMENTO INVEST.: R$ ${compactCurrency(totalInvestmentYield)}`,
+    ...(investmentYieldRows.length > 0 ? ["Rendimentos de investimento no periodo:"] : []),
+    ...investmentYieldRows,
     " ",
     `SALDO FINAL: R$ ${compactCurrency(balance)}`,
   ].slice(0, 46);

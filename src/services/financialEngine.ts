@@ -196,11 +196,11 @@ function shouldIncludeTransactionInMonth(
   isReferenceMonth: boolean,
 ) {
   const transactionDate = getTransactionDate(transaction);
+if (transaction.recorrente) {
+  if (!transactionDate) return true;
 
-  if (transaction.recorrente) {
-    if (!transactionDate) return isReferenceMonth;
-    return isSameMonth(transactionDate, monthDate);
-  }
+  return monthDate >= startOfMonth(transactionDate);
+}
 
   if (!isReferenceMonth) return false;
 

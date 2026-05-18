@@ -2,6 +2,7 @@
 import { DashboardNav } from "@/components/dashboard-nav";
 import TransactionForm, { TransactionFormData } from "@/components/transaction-form";
 import { TransactionList } from "@/components/transaction-list";
+import { isInvestmentYieldCategory } from "@/lib/investments";
 import { apiService } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -84,9 +85,28 @@ const normalizeTransactionCategory = (
 ) => {
   const raw = String(value ?? "").trim();
   if (!raw) return "Sem categoria";
-  if (type === "income" || type === "ia") return raw;
 
   const normalized = normalizeCategoryKey(raw);
+
+  if (type === "income" || type === "ia") {
+    if (["salario", "salario"].includes(normalized) || normalized.includes("sal")) {
+      return "Sal\u00e1rio";
+    }
+
+    if (normalized.includes("comiss") || normalized.includes("comi")) {
+      return "Comiss\u00e3o";
+    }
+
+    if (["renda extra", "rendaextra", "extra"].includes(normalized)) {
+      return "Renda extra";
+    }
+
+    if (isInvestmentYieldCategory(normalized)) {
+      return "Rendimento de Investimento";
+    }
+
+    return raw;
+  }
 
   if (["investimento", "investimentos", "aplicacao", "aporte"].includes(normalized)) {
     return "Investimento";
@@ -653,7 +673,9 @@ export default function TransactionsPage() {
 
     const rawType = pickParam(params.type).toLowerCase().trim();
     const normalizedType: "income" | "expense" =
-      rawType === "income" || rawType === "receita" ? "income" : "expense";
+      rawType === "income" || rawType === "receita" || isInvestmentYieldCategory(rawType)
+        ? "income"
+        : "expense";
     const source = pickParam(params.source).toLowerCase().trim();
     const category = pickParam(params.category).trim();
     const description = pickParam(params.description).trim();
@@ -714,6 +736,34 @@ export default function TransactionsPage() {
   const loadTransactions = async () => {
     try {
       const data = await apiService.getTransactions();
+      const parseMonetaryValue = (value: unknown) => {
+        if (typeof value === "number") {
+          return Number.isFinite(value) ? value : 0;
+        }
+
+        if (typeof value !== "string") {
+          return 0;
+        }
+
+        const cleaned = value.trim().replace(/[^\d,.-]/g, "");
+        if (!cleaned) {
+          return 0;
+        }
+
+        if (cleaned.includes(",") && cleaned.includes(".")) {
+          const lastComma = cleaned.lastIndexOf(",");
+          const lastDot = cleaned.lastIndexOf(".");
+          const normalized =
+            lastComma > lastDot
+              ? cleaned.replace(/\./g, "").replace(",", ".")
+              : cleaned.replace(/,/g, "");
+          const parsed = Number(normalized);
+          return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        const parsed = Number(cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
       const getMonthKey = (value: unknown) => {
         const raw = String(value ?? "").trim();
         if (!raw) return "sem-data";
@@ -741,6 +791,9 @@ export default function TransactionsPage() {
         const rawType = String(
           value?.type ??
             value?.tipo ??
+            value?.tipoTransacao ??
+            value?.tipoLancamento ??
+            value?.tipoMovimentacao ??
             value?.sourceType ??
             value?.entityType ??
             value?.recordType ??
@@ -751,6 +804,8 @@ export default function TransactionsPage() {
             value?.natureza ??
             value?.acaoFinanceira?.type ??
             value?.acaoFinanceira?.tipo ??
+            value?.acaoFinanceira?.tipoTransacao ??
+            value?.acaoFinanceira?.tipoLancamento ??
             value?.receita?.type ??
             value?.receita?.tipo ??
             value?.despesa?.type ??
@@ -765,7 +820,8 @@ export default function TransactionsPage() {
           rawType === "icome" ||
           rawType === "receita" ||
           rawType === "entrada" ||
-          rawType === "ganho"
+          rawType === "ganho" ||
+          isInvestmentYieldCategory(rawType)
         ) {
           return "income";
         }
@@ -905,6 +961,8 @@ export default function TransactionsPage() {
             t?.nome ??
             t?.titulo ??
             t?.historico ??
+            t?.mensagem ??
+            t?.texto ??
             "Sem descricao",
         );
         const originSignature = `${notes} ${description}`
@@ -912,7 +970,13 @@ export default function TransactionsPage() {
           .replace(/[\u0300-\u036f]/g, "")
           .toLowerCase();
         const resolvedType = resolveTransactionType(t);
-        const rawCategory = String(t?.category ?? t?.categoria ?? "Sem categoria");
+        const rawCategory = String(
+          t?.category ??
+            t?.categoria ??
+            t?.grupo ??
+            t?.classificacao ??
+            "Sem categoria",
+        );
         const parsedRecurrenceMonths = Math.floor(
           Number(
             t?.recurrenceMonths ??
@@ -934,13 +998,23 @@ export default function TransactionsPage() {
         id: "",
         deleteCandidates: ids.candidates,
         description,
-        amount: Number(t?.amount ?? t?.valor ?? t?.value ?? t?.preco ?? 0),
+        amount: parseMonetaryValue(
+          t?.amount ??
+            t?.valor ??
+            t?.value ??
+            t?.preco ??
+            t?.valorTransacao ??
+            t?.valorLancamento ??
+            t?.valorEstimado ??
+            0,
+        ),
         type: resolvedType,
         category: normalizeTransactionCategory(rawCategory, resolvedType),
         date: String(
           t?.date ??
             t?.data ??
             t?.dataTransacao ??
+            t?.dataLancamento ??
             t?.dataDespesa ??
             t?.dataReceita ??
             t?.createdAt ??
