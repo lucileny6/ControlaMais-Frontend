@@ -55,7 +55,7 @@ const normalizeExpenseCategoryLabel = (value: string) => {
       "hortifruti",
     ].includes(normalized)
   ) {
-    return "Alimentacao";
+    return "Alimentação";
   }
 
   return raw;
@@ -96,7 +96,7 @@ export default function GraphsPage() {
   const [endDateInput, setEndDateInput] = useState(formatInputDate(initialPeriod.end));
   const [appliedStartDate, setAppliedStartDate] = useState(formatInputDate(initialPeriod.start));
   const [appliedEndDate, setAppliedEndDate] = useState(formatInputDate(initialPeriod.end));
-  const [exportStatus, setExportStatus] = useState("Escolha o periodo e gere o PDF quando quiser.");
+  const [exportStatus, setExportStatus] = useState("Escolha o período e gere o PDF quando quiser.");
 
   useEffect(() => {
     void checkAuthentication();
@@ -135,7 +135,7 @@ export default function GraphsPage() {
   const periodLabel = useMemo(() => {
     const start = appliedPeriod.start.toLocaleDateString("pt-BR");
     const end = appliedPeriod.end.toLocaleDateString("pt-BR");
-    return `${start} ate ${end}`;
+    return `${start} até ${end}`;
   }, [appliedPeriod.end, appliedPeriod.start]);
 
   const filteredTransactions = useMemo(
@@ -160,7 +160,7 @@ export default function GraphsPage() {
   const handleApplyPeriod = () => {
     setAppliedStartDate(startDateInput.trim() || formatInputDate(initialPeriod.start));
     setAppliedEndDate(endDateInput.trim() || formatInputDate(initialPeriod.end));
-    setExportStatus("Periodo atualizado. Agora voce ja pode gerar o PDF.");
+    setExportStatus("Período atualizado. Agora você já pode gerar o PDF.");
   };
 
   const handleExportPdf = () => {
@@ -172,10 +172,10 @@ export default function GraphsPage() {
       totalInvestment: financialTotals.totalInvestment,
       totalInvestmentYield: financialTotals.totalInvestmentYield,
       balance: financialTotals.balance,
-      title: "GRAFICOS FINANCEIROS",
+      title: "GRÁFICOS FINANCEIROS",
       typeLabel: "Todos",
       categoryLabel: "Todas",
-      filePrefix: "graficos-financeiros",
+      filePrefix: "gráficos-financeiros",
     });
 
     setExportStatus(result.status);
@@ -267,7 +267,7 @@ export default function GraphsPage() {
       setTransactions(transactionsResponse ?? []);
       setCategoryBudgets(budgetsResponse ?? []);
     } catch (error) {
-      console.error("Erro ao carregar dados dos graficos:", error);
+      console.error("Erro ao carregar dados dos gráficos:", error);
       setTransactions([]);
       setCategoryBudgets([]);
     } finally {
@@ -280,7 +280,7 @@ export default function GraphsPage() {
       <LinearGradient colors={DASHBOARD_GRADIENT} locations={[0, 0.3, 0.57, 0.82, 1]} style={styles.gradient}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10233f" />
-          <Text style={styles.loadingText}>Carregando graficos...</Text>
+          <Text style={styles.loadingText}>Carregando gráficos...</Text>
         </View>
       </LinearGradient>
     );
@@ -307,9 +307,9 @@ export default function GraphsPage() {
               showsVerticalScrollIndicator={false}
             >
               <View style={[styles.pageCard, isCompactScreen && styles.pageCardCompact]}>
-                <Text style={[styles.title, isCompactScreen && styles.titleCompact]}>Graficos Financeiros</Text>
+                <Text style={[styles.title, isCompactScreen && styles.titleCompact]}>Gráficos Financeiros</Text>
                 <Text style={[styles.subtitle, isCompactScreen && styles.subtitleCompact]}>
-                  Uma pagina separada para acompanhar os dois graficos principais sem misturar com o relatorio.
+                  Uma página separada para acompanhar os dois gráficos principais sem misturar com o relatório.
                 </Text>
 
                 <View style={[styles.chartGrid, isCompactScreen && styles.chartGridCompact]}>
@@ -319,7 +319,7 @@ export default function GraphsPage() {
                     footer={(
                       <View style={styles.periodSection}>
                         <View style={styles.periodHeader}>
-                          <Text style={styles.periodTitle}>Filtrar periodo</Text>
+                          <Text style={styles.periodTitle}>Filtrar período</Text>
                           <Text style={styles.periodAppliedLabel}>{periodLabel}</Text>
                         </View>
 

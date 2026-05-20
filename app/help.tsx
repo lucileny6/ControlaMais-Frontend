@@ -24,17 +24,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const HELP_SECTIONS = [
   {
     title: "Painel",
-    description: "Acompanhe seu saldo, receitas, despesas e ultimos lancamentos em um so lugar.",
+    description: "Acompanhe seu saldo, receitas, despesas e últimos lançamentos em um só lugar.",
     icon: LayoutDashboard,
   },
   {
-    title: "Transacoes",
-    description: "Cadastre entradas e gastos informando valor, categoria, data e descricao.",
+    title: "Transações",
+    description: "Cadastre entradas e gastos informando valor, categoria, data e descrição.",
     icon: Wallet,
   },
   {
     title: "IA",
-    description: "Converse com o assistente para tirar duvidas financeiras ou registrar lancamentos pelo chat.",
+    description: "Converse com o assistente para tirar dúvidas financeiras ou registrar lançamentos pelo chat.",
     icon: Bot,
   },
   {
@@ -43,13 +43,13 @@ const HELP_SECTIONS = [
     icon: Goal,
   },
   {
-    title: "Graficos",
+    title: "Gráficos",
     description: "Visualize seus gastos e receitas de forma clara e organizada.",
     icon: BarChart3,
   },
   {
     title: "Economia",
-    description: "Use ferramentas para simular compras, analisar dividas e receber sugestoes.",
+    description: "Use ferramentas para simular compras, analisar dívidas e receber sugestões.",
     icon: CircleDollarSign,
   },
 ] as const;
@@ -83,7 +83,7 @@ export default function HelpPage() {
           <View style={[styles.contentCard, isCompactScreen && styles.contentCardCompact]}>
             <View style={styles.titleSection}>
               <Text style={styles.title}>Como usar o ControlaMais</Text>
-              <Text style={styles.subtitle}>Guia rapido das funcoes basicas do sistema.</Text>
+              <Text style={styles.subtitle}>Guia rápido das funções básicas do sistema.</Text>
             </View>
 
             <View style={styles.sectionList}>
@@ -112,7 +112,7 @@ export default function HelpPage() {
               <View style={styles.sectionText}>
                 <Text style={styles.tipTitle}>Dica importante</Text>
                 <Text style={styles.tipDescription}>
-                  Mantenha suas transacoes atualizadas para que o painel, graficos e a IA fornecam informacoes mais precisas.
+                  Mantenha suas transações atualizadas para que o painel, gráficos e a IA forneçam informações mais precisas.
                 </Text>
               </View>
             </View>

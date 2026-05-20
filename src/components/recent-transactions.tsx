@@ -1,39 +1,156 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getFinancialBucket } from "@/lib/investments";
+import { parseTransactionDate } from "@/lib/monthly-finance";
 import { DashboardTransaction } from "@/lib/types";
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 interface RecentTransactionsProps {
   transactions: DashboardTransaction[];
 }
 
-export function RecentTransactions({ transactions }: RecentTransactionsProps) {
+const RECENT_LIMIT = 5;
+
+type DisplayVariant = "income" | "expense" | "investment";
+
+type TransactionDisplay = {
+  variant: DisplayVariant;
+  prefix: "+" | "-";
+};
+
+const getTransactionDisplay = (
+  transaction: DashboardTransaction,
+): TransactionDisplay => {
+  const bucket = getFinancialBucket(transaction);
+
+  if (bucket === "investment") {
+    return {
+      variant: "investment",
+      prefix: "-",
+    };
+  }
+
+  if (bucket === "income" || bucket === "investmentYield") {
+    return {
+      variant: "income",
+      prefix: "+",
+    };
+  }
+
+  return {
+    variant: "expense",
+    prefix: "-",
+  };
+};
+
+const getSortTimestamp = (transaction: DashboardTransaction) =>
+  parseTransactionDate(transaction.date)?.getTime() ?? 0;
+
+const formatTransactionDate = (dateString: string) => {
+  const parsedDate = parseTransactionDate(dateString);
+
+  if (!parsedDate) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
+const getAmountStyle = (variant: DisplayVariant) => {
+  switch (variant) {
+    case "income":
+      return styles.amountIncome;
+
+    case "investment":
+      return styles.amountInvestment;
+
+    default:
+      return styles.amountExpense;
+  }
+};
+
+export function RecentTransactions({
+  transactions,
+}: RecentTransactionsProps) {
+  const recentItems = useMemo(() => {
+    if (!transactions?.length) {
+      return [];
+    }
+
+    return [...transactions]
+      .sort((a, b) => getSortTimestamp(b) - getSortTimestamp(a))
+      .slice(0, RECENT_LIMIT);
+  }, [transactions]);
+
   return (
     <Card maxWidth={0} style={styles.card}>
       <CardHeader>
-        <CardTitle style={styles.title}>Transacoes Recentes</CardTitle>
+        <CardTitle style={styles.title}>
+          Transacoes Recentes
+        </CardTitle>
       </CardHeader>
 
       <CardContent>
-        {!transactions || transactions.length === 0 ? (
-          <Text style={styles.empty}>Nenhuma transacao recente</Text>
+        {recentItems.length === 0 ? (
+          <Text style={styles.empty}>
+            Nenhuma transacao recente
+          </Text>
         ) : (
           <View style={styles.list}>
-            {transactions.slice(0, 5).map((transaction) => (
-              <View key={transaction.id} style={styles.row}>
-                <View style={styles.leftBlock}>
-                  <Text style={styles.description}>{transaction.description}</Text>
-                  <Text style={styles.category}>{transaction.category}</Text>
-                </View>
+            {recentItems.map((transaction) => {
+              const display = getTransactionDisplay(transaction);
 
-                <Text style={transaction.type === "income" ? styles.income : styles.expense}>
-                  {Number(transaction.amount || 0).toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })}
-                </Text>
-              </View>
-            ))}
+              const description =
+                String(transaction.description ?? "").trim() ||
+                String(transaction.category ?? "").trim() ||
+                "Sem descricao";
+
+              return (
+                <View key={transaction.id} style={styles.row}>
+                  <View style={styles.mainBlock}>
+                    <Text
+                      style={styles.description}
+                      numberOfLines={2}
+                    >
+                      {description}
+                    </Text>
+
+                    <View style={styles.metaRow}>
+                      <Text
+                        style={styles.metaText}
+                        numberOfLines={1}
+                      >
+                        {transaction.category || "Sem categoria"}
+                      </Text>
+
+                      <Text style={styles.metaText}>
+                        {formatTransactionDate(transaction.date)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.amount,
+                      getAmountStyle(display.variant),
+                    ]}
+                  >
+                    {display.prefix} R${" "}
+                    {Number(transaction.amount || 0).toLocaleString(
+                      "pt-BR",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      },
+                    )}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
       </CardContent>
@@ -52,16 +169,22 @@ const styles = StyleSheet.create({
     shadowColor: "#0f172a",
     shadowOpacity: 0.06,
     shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
   },
+
   title: {
     fontSize: 18,
     fontWeight: "800",
     color: "#10233f",
   },
+
   list: {
     gap: 0,
   },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -71,36 +194,52 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(203, 213, 225, 0.38)",
   },
-  leftBlock: {
+
+  mainBlock: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 6,
   },
+
   description: {
     fontSize: 14,
     fontWeight: "700",
     color: "#11243f",
-    flexShrink: 1,
   },
-  category: {
+
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  metaText: {
     fontSize: 12,
     color: "#718198",
     fontWeight: "500",
+    flexShrink: 1,
   },
-  income: {
+
+  amount: {
+    fontWeight: "800",
+    fontSize: 14,
+    flexShrink: 0,
+    textAlign: "right",
+  },
+
+  amountIncome: {
     color: "#0d8a67",
-    fontWeight: "800",
-    fontSize: 14,
-    flexShrink: 0,
-    textAlign: "right",
   },
-  expense: {
+
+  amountExpense: {
     color: "#c44747",
-    fontWeight: "800",
-    fontSize: 14,
-    flexShrink: 0,
-    textAlign: "right",
   },
+
+  amountInvestment: {
+    color: "#2563eb",
+  },
+
   empty: {
     textAlign: "center",
     color: "#8da0b6",

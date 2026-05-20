@@ -268,7 +268,7 @@ export default function SettingsPage() {
 
         setPendingUsers([]);
         setUsingPendingUsersMock(false);
-        Alert.alert("Erro", "Nao foi possivel carregar os usuarios pendentes.");
+        Alert.alert("Erro", "Não foi possível carregar os usuários pendentes.");
       }
     };
 
@@ -307,18 +307,18 @@ export default function SettingsPage() {
 
   const handleChangePassword = () => {
     if (!newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert("Erro", "Preencha a nova senha e a confirmacao.");
+      Alert.alert("Erro", "Preencha a nova senha e a confirmação.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert("Erro", "As senhas informadas nao conferem.");
+      Alert.alert("Erro", "As senhas informadas não conferem.");
       return;
     }
 
     setNewPassword("");
     setConfirmPassword("");
-    Alert.alert("Alterar senha", "Funcao visual por enquanto. Nenhuma chamada ao backend foi feita.");
+    Alert.alert("Alterar senha", "Função visual por enquanto. Nenhuma chamada ao backend foi feita.");
   };
 
   const handleApproveUser = async (pendingUser: PendingUser) => {
@@ -332,9 +332,9 @@ export default function SettingsPage() {
       }
 
       setPendingUsers((currentUsers) => currentUsers.filter((item) => item.id !== pendingUser.id));
-      Alert.alert("Usuario aprovado", `${resolvePendingUsername(pendingUser)} foi aprovado com sucesso.`);
+      Alert.alert("Usuário aprovado", `${resolvePendingUsername(pendingUser)} foi aprovado com sucesso.`);
     } catch {
-      Alert.alert("Erro", "Nao foi possivel aprovar este usuario.");
+      Alert.alert("Erro", "Não foi possível aprovar este usuário.");
     } finally {
       setApprovingUserId(null);
     }
@@ -378,8 +378,8 @@ export default function SettingsPage() {
                 <Settings size={22} color="#0f766e" strokeWidth={2.3} />
               </View>
               <View style={styles.titleText}>
-                <Text style={styles.title}>Configuracoes</Text>
-                <Text style={styles.subtitle}>Gerencie seu perfil e opcoes basicas da conta.</Text>
+                <Text style={styles.title}>Configurações</Text>
+                <Text style={styles.subtitle}>Gerencie seu perfil e opções básicas da conta.</Text>
               </View>
             </View>
 
@@ -389,7 +389,7 @@ export default function SettingsPage() {
                 <Text style={styles.sectionTitle}>Perfil</Text>
               </View>
 
-              <Text style={styles.label}>Nome do usuario</Text>
+              <Text style={styles.label}>Nome do usuário</Text>
               <TextInput
                 style={styles.input}
                 value={name}
@@ -401,7 +401,7 @@ export default function SettingsPage() {
               <Text style={styles.label}>Email</Text>
               <TextInput
                 style={[styles.input, styles.readOnlyInput]}
-                value={email || "Email nao informado"}
+                value={email || "Email não informado"}
                 editable={false}
                 placeholderTextColor="#8a9aab"
               />
@@ -452,7 +452,7 @@ export default function SettingsPage() {
                   </View>
                 ) : (
                   <View style={styles.emptyPendingUsers}>
-                    <Text style={styles.emptyPendingUsersText}>Nenhum usuario pendente no momento.</Text>
+                    <Text style={styles.emptyPendingUsersText}>Nenhum usuário pendente no momento.</Text>
                   </View>
                 )}
               </View>
@@ -461,7 +461,7 @@ export default function SettingsPage() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Lock size={20} color="#10233f" strokeWidth={2.2} />
-                <Text style={styles.sectionTitle}>Seguranca</Text>
+                <Text style={styles.sectionTitle}>Segurança</Text>
               </View>
 
               <Text style={styles.label}>Nova senha</Text>

@@ -101,13 +101,13 @@ export default function NewTransactionPage() {
       Alert.alert(
         "Sucesso",
         data.recorrente
-          ? `Transacao recorrente cadastrada para ${recurringOccurrencesTotal} ${recurringOccurrencesTotal === 1 ? "mes" : "meses"}!`
-          : "Transacao cadastrada com sucesso!",
+          ? `Transação recorrente cadastrada para ${recurringOccurrencesTotal} ${recurringOccurrencesTotal === 1 ? "mês" : "meses"}!`
+          : "Transação cadastrada com sucesso!",
       );
       router.replace("/dashboard");
     } catch (error: any) {
-      const message = String(error?.message ?? "Nao foi possivel cadastrar a transacao");
-      Alert.alert("Erro", `Nao foi possivel cadastrar a transacao: ${message}`);
+      const message = String(error?.message ?? "Não foi possível cadastrar a transação");
+      Alert.alert("Erro", `Não foi possível cadastrar a transação: ${message}`);
     } finally {
       setLoading(false);
     }

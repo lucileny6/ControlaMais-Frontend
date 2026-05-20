@@ -1,15 +1,17 @@
 import { useCallback, useState } from "react";
-import { apiService } from "@/services/api";
+import { useFocusEffect } from "@react-navigation/native";
+import { toast } from "@/hooks/use-toast";
 import {
   calculateMonthlyFinancialTotals,
 } from "@/lib/investments";
-import { DashboardTransaction } from "@/lib/types";
-import { toast } from "@/hooks/use-toast";
-import { useFocusEffect } from "@react-navigation/native";
 import {
   buildMonthlyFinanceSnapshot,
   normalizeDashboardTransaction,
+  parseTransactionDate,
+
 } from "@/lib/monthly-finance";
+import { DashboardTransaction } from "@/lib/types";
+import { apiService } from "@/services/api";
 
 type DashboardData = {
   saldo: number;
@@ -36,33 +38,65 @@ export function useDashboard() {
 
       const [dashboardResponse, transactionsResponse] = await Promise.all([
         apiService.getDashboard(),
-        apiService.getTransactions({ preserveSessionOnAuthError: true }).catch(() => []),
+        apiService
+          .getTransactions({
+            preserveSessionOnAuthError: true,
+          })
+          .catch(() => []),
       ]);
 
-      const normalizedAll = (transactionsResponse ?? []).map((transaction: any, index: number) =>
-        normalizeDashboardTransaction(transaction, index),
-      );
-      const normalizedRecent = (dashboardResponse.transacoesRecentes ?? []).map((transaction: any, index: number) =>
-        normalizeDashboardTransaction(transaction, index),
+      const transactionsPayload = transactionsResponse.length
+        ? transactionsResponse
+        : dashboardResponse.transacoesRecentes ?? [];
+
+      const normalizedAll = (transactionsPayload ?? []).map(
+        (transaction: any, index: number) =>
+          normalizeDashboardTransaction(transaction, index),
       );
 
-      const sourceForMonth = normalizedAll.length > 0 ? normalizedAll : normalizedRecent;
-      const snapshot = buildMonthlyFinanceSnapshot(sourceForMonth);
-      const { totalExpense, totalInvestment, balance } = calculateMonthlyFinancialTotals(
-        snapshot.transactions,
-      );
+      const snapshot = buildMonthlyFinanceSnapshot(normalizedAll);
+      const { totalExpense, totalInvestment, balance } =
+        calculateMonthlyFinancialTotals(snapshot.transactions);
 
       setData({
         saldo: balance,
         totalReceitas: snapshot.totalIncome,
         totalDespesas: totalExpense,
         totalInvestimentos: totalInvestment,
-        transacoesRecentes: snapshot.recentTransactions,
+        transacoesRecentes: normalizedAll
+  .filter((t) => {
+    const parsed =
+      parseTransactionDate(t.date);
+
+    if (!parsed) {
+      return false;
+    }
+
+    const now = new Date();
+
+    return (
+      parsed.getMonth() === now.getMonth() &&
+      parsed.getFullYear() === now.getFullYear()
+    );
+  })
+
+  .sort((a, b) => {
+    const aTime =
+      parseTransactionDate(a.date)?.getTime() ?? 0;
+
+    const bTime =
+      parseTransactionDate(b.date)?.getTime() ?? 0;
+
+    return bTime - aTime;
+  })
+
+  .slice(0, 5),
       });
     } catch (error: any) {
       toast({
         title: "Erro ao carregar dashboard",
-        description: error?.message ?? "Nao foi possivel buscar os dados do servidor",
+        description:
+          error?.message ?? "Nao foi possivel buscar os dados do servidor",
         variant: "destructive",
       });
     } finally {

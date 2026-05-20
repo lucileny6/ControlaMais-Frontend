@@ -1,0 +1,8 @@
+env: load .env
+env: export EXPO_PUBLIC_CHAT_PROVIDER EXPO_PUBLIC_N8N_CHAT_WEBHOOK_URL EXPO_PUBLIC_N8N_SIMULADOR_WEBHOOK_URL EXPO_PUBLIC_API_URL EXPO_PUBLIC_API_URL_WEB
+Networking has been disabled
+Starting project at C:\programa\ControlaMais-Frontend
+React Compiler enabled
+Starting Metro Bundler
+Waiting on http://localhost:8081
+Logs for your project will appear below.

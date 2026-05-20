@@ -77,7 +77,7 @@ export default function RegisterPage() {
               <CardHeader>
                 <CardTitle style={styles.cardTitle}>Criar Conta</CardTitle>
                 <CardDescription style={styles.cardSubtitle}>
-                  Seu controle financeiro comeca aqui.
+                  Seu controle financeiro começa aqui.
                 </CardDescription>
               </CardHeader>
 
@@ -145,7 +145,7 @@ export default function RegisterPage() {
                 </TouchableOpacity>
 
                 <View style={styles.loginContainer}>
-                  <Text style={styles.loginText}>Ja tem conta? </Text>
+                  <Text style={styles.loginText}>Já tem conta? </Text>
                   <Link href="/login" asChild>
                     <TouchableOpacity disabled={isLoading}>
                       <Text style={[styles.loginLink, isLoading && styles.linkDisabled]}>Entrar</Text>

@@ -8,8 +8,8 @@ interface ChatSuggestionsProps {
 
 const suggestions = [
   "Qual meu saldo?",
-  "Quanto gastei esse mes?",
-  "Quanto recebi esse mes?",
+  "Quanto gastei esse mês?",
+  "Quanto recebi esse mês?",
   "Registrar uma nova despesa",
   "Como posso economizar mais dinheiro?",
   "Simular uma compra",
@@ -18,7 +18,7 @@ const suggestions = [
 export function ChatSuggestions({ onSelectSuggestion, disabled = false }: ChatSuggestionsProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sugestoes de perguntas:</Text>
+      <Text style={styles.title}>Sugestões de perguntas:</Text>
 
       <ScrollView
         horizontal

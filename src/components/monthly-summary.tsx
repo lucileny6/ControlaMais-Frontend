@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 export interface ResumoFinanceiroMensal {
@@ -28,7 +28,7 @@ const resumoFinanceiroMensal: ResumoFinanceiroMensal = {
   metaEconomia: 1000,
   mes: 'Janeiro 2024',
   gastosPorCategoria: [
-    { categoria: 'Alimentacao', valorGasto: 450, orcamento: 500 },
+    { categoria: 'Alimentação', valorGasto: 450, orcamento: 500 },
     { categoria: 'Transporte', valorGasto: 200, orcamento: 250 },
     { categoria: 'Contas', valorGasto: 300, orcamento: 350 },
     { categoria: 'Lazer', valorGasto: 150, orcamento: 200 },
@@ -121,7 +121,7 @@ export function MonthlySummary({ data }: { data?: ResumoFinanceiroMensal | Month
     <View style={[styles.container, isTabletOrMobile ? styles.containerResponsive : styles.containerDesktop]}>
       <View style={[styles.card, isTabletOrMobile ? styles.cardResponsive : styles.cardDesktop]}>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Resumo do Mes</Text>
+          <Text style={styles.cardTitle}>Resumo do Mês</Text>
           <Text style={styles.cardDescription}>{summary.mes}</Text>
         </View>
         <View style={styles.cardContent}>
@@ -151,7 +151,7 @@ export function MonthlySummary({ data }: { data?: ResumoFinanceiroMensal | Month
           <View style={styles.progressContainer}>
             <View style={styles.progressItem}>
               <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Taxa de poupanca</Text>
+                <Text style={styles.progressLabel}>Taxa de poupança</Text>
                 <Text style={styles.progressPercentage}>{savingsRate.toFixed(1)}%</Text>
               </View>
               <ProgressBar value={savingsRate} color="#16a34a" />
@@ -171,7 +171,7 @@ export function MonthlySummary({ data }: { data?: ResumoFinanceiroMensal | Month
       <View style={[styles.card, styles.budgetCard, isTabletOrMobile ? styles.cardResponsive : styles.cardDesktop]}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Status Financeiro</Text>
-          <Text style={styles.cardDescription}>Status financeiro e recomendacoes da IA</Text>
+          <Text style={styles.cardDescription}>Status financeiro e recomendações da IA</Text>
         </View>
         <View style={styles.cardContent}>
           <View style={styles.budgetSummaryBox}>
@@ -193,9 +193,9 @@ export function MonthlySummary({ data }: { data?: ResumoFinanceiroMensal | Month
           </View>
 
           <View style={styles.aiSection}>
-            <Text style={styles.aiTitle}>Sugestoes da IA</Text>
+            <Text style={styles.aiTitle}>Sugestões da IA</Text>
             {sugestoesIA.length === 0 && (
-              <Text style={styles.emptyBudgetText}>Sem sugestoes para este periodo.</Text>
+              <Text style={styles.emptyBudgetText}>Sem sugestões para este período.</Text>
             )}
             {sugestoesIA.map((item, index) => {
               return (

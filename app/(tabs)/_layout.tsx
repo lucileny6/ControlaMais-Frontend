@@ -48,7 +48,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="transactions"
         options={{
-          title: "Transa\u00e7\u00f5es",
+          title: "Transações",
           tabBarIcon: ({ color }) => (
             <Wallet size={tabIconSize} color={color} strokeWidth={2.2} />
           ),
@@ -76,7 +76,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="graphs"
         options={{
-          title: "Gr\u00e1fico",
+          title: "Gráfico",
           tabBarIcon: ({ color }) => (
             <BarChart3 size={tabIconSize} color={color} strokeWidth={2.2} />
           ),

@@ -1,4 +1,4 @@
-﻿import { DashboardHeader } from '@/components/dashboard-header';
+import { DashboardHeader } from '@/components/dashboard-header';
 import { DashboardNav } from '@/components/dashboard-nav';
 import { Progress } from '@/components/ui/progress';
 import { CreateDespesaDTO, GoalDTO, apiService } from '@/services/api';
@@ -102,7 +102,7 @@ export default function GoalsPage() {
 
     return {
       id: String(goal?.id ?? goal?._id ?? `meta-${index}`),
-      title: normalizedTitle || 'Meta sem titulo',
+      title: normalizedTitle || 'Meta sem título',
       description: normalizedDescription || 'Meta financeira',
       targetAmount: toNumber(
         goal?.targetAmount ??
@@ -233,7 +233,7 @@ export default function GoalsPage() {
     for (const [key, value] of Object.entries(item ?? {})) {
       const normalizedKey = key.toLowerCase();
       const isLikelyId = normalizedKey.includes('id');
-      const isForeignId = normalizedKey.includes('user') || normalizedKey.includes('usuario');
+      const isForeignId = normalizedKey.includes('user') || normalizedKey.includes('usuário');
       if (!isLikelyId || isForeignId) continue;
       pushCandidate(value);
     }
@@ -315,7 +315,7 @@ export default function GoalsPage() {
       }
 
       if (lastError) {
-        console.error('Erro ao atualizar transacao vinculada a meta:', lastError);
+        console.error('Erro ao atualizar transação vinculada a meta:', lastError);
       }
     }
 
@@ -324,7 +324,7 @@ export default function GoalsPage() {
     const fallbackIds = createdIds.length > 0 ? createdIds : await findGoalTransactionIdsByPayload(payload);
 
     if (fallbackIds.length === 0) {
-      throw new Error('Meta salva, mas nao foi possivel localizar a transacao de investimento vinculada.');
+      throw new Error('Meta salva, mas não foi possível localizar a transação de investimento vinculada.');
     }
 
     return {
@@ -358,7 +358,7 @@ export default function GoalsPage() {
     }
 
     if (!deleted && link.transactionIds.length > 0) {
-      throw lastError ?? new Error('Nao foi possivel excluir a transacao vinculada a meta.');
+      throw lastError ?? new Error('Não foi possível excluir a transação vinculada a meta.');
     }
   };
 
@@ -491,12 +491,12 @@ export default function GoalsPage() {
     const valorMeta = parseInputAmount(newGoal.amount);
 
     if (!nome) {
-      Alert.alert('Campo obrigatorio', 'Informe o titulo da meta.');
+      Alert.alert('Campo obrigatório', 'Informe o título da meta.');
       return;
     }
 
     if (valorMeta <= 0) {
-      Alert.alert('Valor invalido', 'Informe um valor de meta maior que zero.');
+      Alert.alert('Valor inválido', 'Informe um valor de meta maior que zero.');
       return;
     }
 
@@ -574,14 +574,14 @@ export default function GoalsPage() {
         Alert.alert(
           'Sucesso parcial',
           editingGoalId
-            ? 'Meta atualizada, mas a lista nao conseguiu recarregar agora.'
-            : 'Meta criada, mas a lista nao conseguiu recarregar agora.',
+            ? 'Meta atualizada, mas a lista não conseguiu recarregar agora.'
+            : 'Meta criada, mas a lista não conseguiu recarregar agora.',
         );
         return;
       }
       Alert.alert('Sucesso', editingGoalId ? 'Meta atualizada com sucesso.' : 'Meta criada com sucesso.');
     } catch (error: any) {
-      const message = String(error?.message ?? 'Nao foi possivel salvar a meta.');
+      const message = String(error?.message ?? 'Não foi possível salvar a meta.');
       Alert.alert('Erro ao salvar meta', message);
     } finally {
       setIsCreatingGoal(false);
@@ -613,11 +613,11 @@ export default function GoalsPage() {
               Alert.alert(
                 reloaded ? 'Sucesso' : 'Sucesso parcial',
                 reloaded
-                  ? 'Meta excluida com sucesso.'
-                  : 'Meta excluida, mas a lista nao conseguiu recarregar agora.',
+                  ? 'Meta excluída com sucesso.'
+                  : 'Meta excluída, mas a lista não conseguiu recarregar agora.',
               );
             } catch (error: any) {
-              const message = String(error?.message ?? 'Nao foi possivel excluir a meta.');
+              const message = String(error?.message ?? 'Não foi possível excluir a meta.');
               Alert.alert('Erro ao excluir meta', message);
             }
           },
@@ -655,11 +655,11 @@ export default function GoalsPage() {
 
       const loaded = await loadGoals();
       if (!loaded) {
-        Alert.alert('Erro ao carregar metas', 'Nao foi possivel atualizar a lista de metas agora.');
+        Alert.alert('Erro ao carregar metas', 'Não foi possível atualizar a lista de metas agora.');
       }
     } catch (error) {
       console.error('Erro ao inicializar tela de metas:', error);
-      Alert.alert('Erro ao inicializar', 'Nao foi possivel carregar as metas neste momento.');
+      Alert.alert('Erro ao inicializar', 'Não foi possível carregar as metas neste momento.');
     } finally {
       setIsLoading(false);
     }
@@ -839,17 +839,17 @@ export default function GoalsPage() {
 
                       <ScrollView style={styles.modalBody}>
                         <View style={styles.formGroup}>
-                          <Text style={styles.label}>Titulo da Meta</Text>
+                          <Text style={styles.label}>Título da Meta</Text>
                           <TextInput
                             style={styles.input}
-                            placeholder='Ex: Reserva de emergencia'
+                            placeholder='Ex: Reserva de emergência'
                             value={newGoal.title}
                             onChangeText={(text) => setNewGoal((prev) => ({ ...prev, title: text }))}
                           />
                         </View>
 
                         <View style={styles.formGroup}>
-                          <Text style={styles.label}>Descricao</Text>
+                          <Text style={styles.label}>Descrição</Text>
                           <TextInput
                             style={[styles.input, styles.textArea]}
                             placeholder='Descreva sua meta...'
@@ -893,7 +893,7 @@ export default function GoalsPage() {
                           disabled={isCreatingGoal}
                         >
                           <Text style={styles.createButtonText}>
-                            {isCreatingGoal ? 'Salvando...' : editingGoalId ? 'Salvar Alteracoes' : 'Criar Meta'}
+                            {isCreatingGoal ? 'Salvando...' : editingGoalId ? 'Salvar Alterações' : 'Criar Meta'}
                           </Text>
                         </TouchableOpacity>
                       </ScrollView>

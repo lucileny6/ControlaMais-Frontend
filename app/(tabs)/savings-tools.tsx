@@ -90,14 +90,14 @@ function getFinancialStatus(totalIncome: number, totalExpenses: number) {
           label: "Desequilibrado",
           accent: "#c44747",
           tone: "danger" as const,
-          description: "Ha gastos no periodo sem receita registrada para sustentar o fechamento.",
+          description: "Há gastos no período sem receita registrada para sustentar o fechamento.",
           expenseRate: 1,
         }
       : {
           label: "Controlado",
           accent: "#0d8a67",
           tone: "positive" as const,
-          description: "Nao houve movimentacao suficiente no periodo para indicar pressao no orcamento.",
+          description: "Não houve movimentação suficiente no período para indicar pressão no orçamento.",
           expenseRate: 0,
         };
   }
@@ -109,7 +109,7 @@ function getFinancialStatus(totalIncome: number, totalExpenses: number) {
       label: "Controlado",
       accent: "#0d8a67",
       tone: "positive" as const,
-      description: "Os gastos ficaram dentro da faixa ideal de ate 60% da receita.",
+      description: "Os gastos ficaram dentro da faixa ideal de até 60% da receita.",
       expenseRate,
     };
   }
@@ -119,7 +119,7 @@ function getFinancialStatus(totalIncome: number, totalExpenses: number) {
       label: "Equilibrado",
       accent: "#f59e0b",
       tone: "warning" as const,
-      description: "Os gastos ainda estao administraveis, mas ja pedem mais atencao.",
+      description: "Os gastos ainda estão administráveis, mas já pedem mais atenção.",
       expenseRate,
     };
   }
@@ -241,7 +241,7 @@ export default function SavingsToolsPage() {
   const applyMonthFilter = () => {
     const parsed = parseMonthYear(monthInput);
     if (!parsed) {
-      Alert.alert("Mes invalido", "Use o formato MM-AAAA. Exemplo: 03-2026");
+      Alert.alert("Mês inválido", "Use o formato MM-AAAA. Exemplo: 03-2026");
       return;
     }
 
@@ -296,7 +296,7 @@ export default function SavingsToolsPage() {
 
         return {
           title: `Reduzir gastos com ${item.categoria}`,
-          description: `Voce gastou ${formatCurrency(currentSpend)} em ${item.categoria} neste periodo. Um corte de ${item.percentualReducao}% pode gerar aproximadamente ${formatCurrency(item.economia)} de folga no proximo fechamento.`,
+          description: `Você gastou ${formatCurrency(currentSpend)} em ${item.categoria} neste período. Um corte de ${item.percentualReducao}% pode gerar aproximadamente ${formatCurrency(item.economia)} de folga no próximo fechamento.`,
           potentialSavings: item.economia,
           difficulty,
           category: item.categoria,
@@ -360,13 +360,13 @@ export default function SavingsToolsPage() {
                   <View style={styles.heroBlock}>
                     <Text style={styles.title}>Plano de economia</Text>
                     <Text style={styles.subtitle}>
-                      Acompanhe oportunidades de reducao de gastos e identifique onde ha mais espaco para melhorar o fechamento do mes.
+                      Acompanhe oportunidades de redução de gastos e identifique onde há mais espaço para melhorar o fechamento do mês.
                     </Text>
                   </View>
 
                   <View style={styles.filterCard}>
-                    <Text style={styles.filterLabel}>Periodo analisado</Text>
-                    <Text style={styles.filterValue}>{monthLabel || "Mes atual"}</Text>
+                    <Text style={styles.filterLabel}>Período analisado</Text>
+                    <Text style={styles.filterValue}>{monthLabel || "Mês atual"}</Text>
                     <View style={styles.monthFilterRow}>
                       <TextInput
                         style={styles.monthInput}
@@ -383,21 +383,21 @@ export default function SavingsToolsPage() {
 
                 <View style={[styles.statsGrid, !isLargeScreen && styles.statsGridStacked]}>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>Receitas do periodo</Text>
+                    <Text style={styles.statLabel}>Receitas do período</Text>
                     <Text style={[styles.statValue, styles.positiveValue]}>{formatCurrency(totalIncome)}</Text>
                     <Text style={styles.statHint}>Base usada para calcular a faixa ideal</Text>
                   </View>
 
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>Despesas do periodo</Text>
+                    <Text style={styles.statLabel}>Despesas do período</Text>
                     <Text style={[styles.statValue, styles.negativeValue]}>{formatCurrency(totalExpenses)}</Text>
-                    <Text style={styles.statHint}>{transactionCount} lancamentos analisados</Text>
+                    <Text style={styles.statHint}>{transactionCount} lançamentos analisados</Text>
                   </View>
 
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>Faixa ideal de gastos</Text>
                     <Text style={styles.statValue}>{formatCurrency(expenseLimit)}</Text>
-                    <Text style={styles.statHint}>Regra atual: ate 60% da receita</Text>
+                    <Text style={styles.statHint}>Regra atual: até 60% da receita</Text>
                   </View>
 
                   <View style={[styles.statCard, styles.statusCard]}>
@@ -414,13 +414,13 @@ export default function SavingsToolsPage() {
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>Economia potencial</Text>
                     <Text style={[styles.statValue, styles.positiveValue]}>{formatCurrency(totalPotentialSavings)}</Text>
-                    <Text style={styles.statHint}>Soma das sugestoes priorizadas pela IA</Text>
+                    <Text style={styles.statHint}>Soma das sugestões priorizadas pela IA</Text>
                   </View>
                 </View>
 
                 <SavingsSuggestions
                   suggestions={suggestions}
-                  monthLabel={monthLabel || "periodo atual"}
+                  monthLabel={monthLabel || "período atual"}
                   totalPotentialSavings={totalPotentialSavings}
                   totalExpenses={totalExpenses}
                   expenseLimit={expenseLimit}

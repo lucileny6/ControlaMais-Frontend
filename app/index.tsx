@@ -24,12 +24,12 @@ export default function HomeScreen() {
     try {
       const canOpen = await Linking.canOpenURL(APP_DOWNLOAD_URL);
       if (!canOpen) {
-        Alert.alert("Download", "Link de download ainda nao configurado.");
+        Alert.alert("Download", "Link de download ainda não configurado.");
         return;
       }
       await Linking.openURL(APP_DOWNLOAD_URL);
     } catch {
-      Alert.alert("Download", "Nao foi possivel abrir o link de download.");
+      Alert.alert("Download", "Não foi possível abrir o link de download.");
     }
   };
 

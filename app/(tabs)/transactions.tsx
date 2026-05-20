@@ -1,4 +1,4 @@
-﻿import { DashboardHeader } from "@/components/dashboard-header";
+import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
 import TransactionForm, { TransactionFormData } from "@/components/transaction-form";
 import { TransactionList } from "@/components/transaction-list";
@@ -89,12 +89,12 @@ const normalizeTransactionCategory = (
   const normalized = normalizeCategoryKey(raw);
 
   if (type === "income" || type === "ia") {
-    if (["salario", "salario"].includes(normalized) || normalized.includes("sal")) {
-      return "Sal\u00e1rio";
+    if (["salario"].includes(normalized) || normalized.includes("sal")) {
+      return "Salário";
     }
 
     if (normalized.includes("comiss") || normalized.includes("comi")) {
-      return "Comiss\u00e3o";
+      return "Comissão";
     }
 
     if (["renda extra", "rendaextra", "extra"].includes(normalized)) {
@@ -115,7 +115,7 @@ const normalizeTransactionCategory = (
     return "Moradia";
   }
   if (["alimentacao", "mercado", "supermercado", "feira", "padaria", "acougue", "sacolao", "hortifruti"].includes(normalized)) {
-    return "Alimentacao";
+    return "Alimentação";
   }
   if (["restaurante", "delivery", "ifood", "lanche", "pizza", "hamburguer"].includes(normalized)) {
     return "Restaurante";
@@ -124,7 +124,7 @@ const normalizeTransactionCategory = (
     return "Transporte";
   }
   if (["saude", "medicamentos", "medicamento", "farmacia", "consulta", "plano de saude", "academia"].includes(normalized)) {
-    return "Saude";
+    return "Saúde";
   }
   if (["lazer", "streaming", "cinema", "viagens", "viagem", "show", "bar", "festa"].includes(normalized)) {
     return "Lazer";
@@ -133,7 +133,7 @@ const normalizeTransactionCategory = (
     return "Compras";
   }
   if (["educacao", "curso", "faculdade", "escola", "livro", "livros"].includes(normalized)) {
-    return "Educacao";
+    return "Educação";
   }
   if (["pet", "pets", "racao", "veterinario"].includes(normalized)) {
     return "Pets";
@@ -875,7 +875,7 @@ export default function TransactionsPage() {
 
           for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
             const normalizedKey = key.toLowerCase();
-            const isForeignId = normalizedKey.includes("user") || normalizedKey.includes("usuario");
+            const isForeignId = normalizedKey.includes("user") || normalizedKey.includes("usuário");
             const isLikelyId =
               normalizedKey === "id" ||
               normalizedKey.endsWith("id") ||
@@ -934,7 +934,7 @@ export default function TransactionsPage() {
         for (const [key, value] of Object.entries(item ?? {})) {
           const normalizedKey = key.toLowerCase();
           const isLikelyId = normalizedKey.includes("id");
-          const isForeignId = normalizedKey.includes("user") || normalizedKey.includes("usuario");
+          const isForeignId = normalizedKey.includes("user") || normalizedKey.includes("usuário");
           if (!isLikelyId || isForeignId) continue;
           pushCandidate(value);
         }
@@ -963,7 +963,7 @@ export default function TransactionsPage() {
             t?.historico ??
             t?.mensagem ??
             t?.texto ??
-            "Sem descricao",
+            "Sem descrição",
         );
         const originSignature = `${notes} ${description}`
           .normalize("NFD")
@@ -1093,8 +1093,8 @@ export default function TransactionsPage() {
       return enrichedTransactions;
     } catch (error: any) {
       setTransactions([]);
-      const message = String(error?.message ?? "Nao foi possivel carregar transacoes");
-      showMessage("Erro", `Nao foi possivel carregar transacoes: ${message}`);
+      const message = String(error?.message ?? "Não foi possível carregar transações");
+      showMessage("Erro", `Não foi possível carregar transações: ${message}`);
       return [];
     }
   };
@@ -1138,7 +1138,7 @@ export default function TransactionsPage() {
         ? Math.max(1, Math.floor(Number(data.recurrenceMonths ?? 12)))
         : 1;
       const formatRecurringMonthCount = (value: number) =>
-        `${value} ${value === 1 ? "mes" : "meses"}`;
+        `${value} ${value === 1 ? "mês" : "meses"}`;
 
       const parseIsoDateParts = (value: string) => {
         const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1209,9 +1209,9 @@ export default function TransactionsPage() {
         }
 
         if (!updated) {
-          throw lastError ?? new Error("Nao foi possivel atualizar a transacao");
+          throw lastError ?? new Error("Não foi possível atualizar a transação");
         }
-        successMessage = "Transacao atualizada com sucesso!";
+        successMessage = "Transação atualizada com sucesso!";
       } else {
         const payloadsToCreate = data.recorrente ? buildRecurringPayloads() : [payload];
         const createTransaction = (dto: typeof payload) =>
@@ -1229,15 +1229,15 @@ export default function TransactionsPage() {
         const failedCreations = creationResults.filter((result) => result.status === "rejected");
         if (failedCreations.length === creationResults.length) {
           const firstError = failedCreations[0] as PromiseRejectedResult;
-          throw firstError.reason ?? new Error("Nao foi possivel salvar a transacao recorrente");
+          throw firstError.reason ?? new Error("Não foi possível salvar a transação recorrente");
         }
 
         if (failedCreations.length > 0) {
-          successMessage = `Foram salvas ${creationResults.length - failedCreations.length} de ${creationResults.length} recorrencias. Verifique os meses restantes.`;
+          successMessage = `Foram salvas ${creationResults.length - failedCreations.length} de ${creationResults.length} recorrências. Verifique os meses restantes.`;
         } else {
           successMessage = data.recorrente
-            ? `Transacao recorrente cadastrada para ${formatRecurringMonthCount(recurringOccurrencesTotal)}.`
-            : "Transacao cadastrada com sucesso!";
+            ? `Transação recorrente cadastrada para ${formatRecurringMonthCount(recurringOccurrencesTotal)}.`
+            : "Transação cadastrada com sucesso!";
         }
       }
 
@@ -1274,11 +1274,11 @@ export default function TransactionsPage() {
         latestTransactions = await loadTransactions();
 
         if (deletedFutureCount > 0) {
-          successMessage = `${successMessage} ${deletedFutureCount} recorrencias futuras foram removidas.`;
+          successMessage = `${successMessage} ${deletedFutureCount} recorrências futuras foram removidas.`;
         }
 
         if (failedFutureCount > 0) {
-          successMessage = `${successMessage} ${failedFutureCount} recorrencias futuras nao puderam ser removidas.`;
+          successMessage = `${successMessage} ${failedFutureCount} recorrências futuras não puderam ser removidas.`;
         }
       } else if (editingTransaction && data.recorrente) {
         const originalSeriesTransactions = getRecurringSeriesTransactions(editingTransaction).filter(
@@ -1369,19 +1369,19 @@ export default function TransactionsPage() {
         latestTransactions = await loadTransactions();
 
         if (updatedFutureCount > 0) {
-          successMessage = `${successMessage} ${updatedFutureCount} recorrencias futuras foram atualizadas.`;
+          successMessage = `${successMessage} ${updatedFutureCount} recorrências futuras foram atualizadas.`;
         }
 
         if (createdFutureCount > 0) {
-          successMessage = `${successMessage} ${createdFutureCount} recorrencias futuras foram criadas.`;
+          successMessage = `${successMessage} ${createdFutureCount} recorrências futuras foram criadas.`;
         }
 
         if (deletedFutureCount > 0) {
-          successMessage = `${successMessage} ${deletedFutureCount} recorrencias futuras excedentes foram removidas.`;
+          successMessage = `${successMessage} ${deletedFutureCount} recorrências futuras excedentes foram removidas.`;
         }
 
         if (failedFutureCount > 0) {
-          successMessage = `${successMessage} ${failedFutureCount} recorrencias futuras nao puderam ser sincronizadas.`;
+          successMessage = `${successMessage} ${failedFutureCount} recorrências futuras não puderam ser sincronizadas.`;
         }
 
         console.log("[Transactions] edit recurring sync:", {
@@ -1411,7 +1411,7 @@ export default function TransactionsPage() {
           });
 
           if (missingDates.length > 0) {
-            successMessage = `${successMessage} Meses nao retornados pela API apos salvar: ${missingDates.join(", ")}.`;
+            successMessage = `${successMessage} Meses não retornados pela API após salvar: ${missingDates.join(", ")}.`;
           }
         }
 
@@ -1452,8 +1452,8 @@ export default function TransactionsPage() {
       showMessage("Sucesso", successMessage);
       resetModalState();
     } catch (error: any) {
-      const message = String(error?.message ?? "Erro ao salvar transacao");
-      showMessage("Erro", editingTransaction ? `Erro ao atualizar transacao: ${message}` : `Erro ao salvar transacao: ${message}`);
+      const message = String(error?.message ?? "Erro ao salvar transação");
+      showMessage("Erro", editingTransaction ? `Erro ao atualizar transação: ${message}` : `Erro ao salvar transação: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -1475,15 +1475,15 @@ export default function TransactionsPage() {
       }
 
       if (!deleted) {
-        throw lastError ?? new Error("Nao foi possivel excluir a transacao");
+        throw lastError ?? new Error("Não foi possível excluir a transação");
       }
 
       await loadTransactions();
-      showMessage("Sucesso", "Transacao excluida com sucesso!");
+      showMessage("Sucesso", "Transação excluída com sucesso!");
     } catch (error: any) {
-      const message = String(error?.message ?? "Nao foi possivel excluir a transacao");
+      const message = String(error?.message ?? "Não foi possível excluir a transação");
       if (message.includes("403")) {
-        showMessage("Erro 403", "Sem permissao para excluir esta transacao. Verifique se o token pertence ao mesmo usuario da transacao.");
+        showMessage("Erro 403", "Sem permissão para excluir esta transação. Verifique se o token pertence ao mesmo usuário da transação.");
         return;
       }
       showMessage("Erro", message);
@@ -1526,7 +1526,7 @@ export default function TransactionsPage() {
       }
 
       if (deletedCount === 0) {
-        throw new Error("Nao foi possivel excluir a serie recorrente");
+        throw new Error("Não foi possível excluir a série recorrente");
       }
 
       await loadTransactions();
@@ -1534,16 +1534,16 @@ export default function TransactionsPage() {
       if (failedCount > 0) {
         showMessage(
           "Sucesso parcial",
-          `${deletedCount} transacoes recorrentes foram excluidas e ${failedCount} nao puderam ser removidas.`,
+          `${deletedCount} transações recorrentes foram excluídas e ${failedCount} não puderam ser removidas.`,
         );
         return;
       }
 
-      showMessage("Sucesso", `${deletedCount} transacoes recorrentes foram excluidas com sucesso!`);
+      showMessage("Sucesso", `${deletedCount} transações recorrentes foram excluídas com sucesso!`);
     } catch (error: any) {
-      const message = String(error?.message ?? "Nao foi possivel excluir a serie recorrente");
+      const message = String(error?.message ?? "Não foi possível excluir a série recorrente");
       if (message.includes("403")) {
-        showMessage("Erro 403", "Sem permissao para excluir esta serie de transacoes.");
+        showMessage("Erro 403", "Sem permissão para excluir esta série de transações.");
         return;
       }
       showMessage("Erro", message);
@@ -1703,7 +1703,7 @@ export default function TransactionsPage() {
         backendId: transaction.backendId,
         deleteCandidates: transaction.deleteCandidates,
       });
-      showMessage("Erro", "Esta transacao nao possui um ID valido para exclusao.");
+      showMessage("Erro", "Esta transação não possui um ID válido para exclusão.");
       return;
     }
 
@@ -1719,8 +1719,8 @@ export default function TransactionsPage() {
       const isRecurring = Boolean(transaction.recorrente);
       const confirmed = webEnv.confirm?.(
         isRecurring
-          ? "Tem certeza que deseja excluir esta transacao recorrente e os meses seguintes?"
-          : "Tem certeza que deseja excluir esta transacao?",
+          ? "Tem certeza que deseja excluir esta transação recorrente e os meses seguintes?"
+          : "Tem certeza que deseja excluir esta transação?",
       );
       if (confirmed) {
         if (isRecurring) {
@@ -1733,10 +1733,10 @@ export default function TransactionsPage() {
     }
 
     Alert.alert(
-      "Excluir transacao",
+      "Excluir transação",
       transaction.recorrente
-        ? "Tem certeza que deseja excluir esta transacao recorrente e os meses seguintes?"
-        : "Tem certeza que deseja excluir esta transacao?",
+        ? "Tem certeza que deseja excluir esta transação recorrente e os meses seguintes?"
+        : "Tem certeza que deseja excluir esta transação?",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -1756,13 +1756,13 @@ export default function TransactionsPage() {
 
   const handleExportPdf = () => {
     if (Platform.OS !== "web") {
-      showMessage("Exportar PDF", "No app mobile, use a versao web para exportar PDF.");
+      showMessage("Exportar PDF", "No app mobile, use a versão web para exportar PDF.");
       return;
     }
 
     const exportRows = exportContext.filtered;
     if (exportRows.length === 0) {
-      showMessage("Exportar PDF", "Nao ha transacoes nos filtros atuais para exportar.");
+      showMessage("Exportar PDF", "Não há transações nos filtros atuais para exportar.");
       return;
     }
 
@@ -1783,7 +1783,7 @@ export default function TransactionsPage() {
       !webEnv.Blob ||
       !webEnv.TextEncoder
     ) {
-      showMessage("Exportar PDF", "Exportacao PDF indisponivel neste ambiente.");
+      showMessage("Exportar PDF", "Exportação PDF indisponível neste ambiente.");
       return;
     }
 
@@ -1812,7 +1812,7 @@ export default function TransactionsPage() {
       "RELATORIO DE TRANSACOES",
       `Gerado em ${new Date().toLocaleDateString("pt-BR")}`,
       " ",
-      `${fitCell("Data", 12)}${fitCell("Descricao", 30)}${fitCell("Categoria", 22)}${fitCell("Tipo", 12)}${fitCell("Valor", 16)}`,
+      `${fitCell("Data", 12)}${fitCell("Descrição", 30)}${fitCell("Categoria", 22)}${fitCell("Tipo", 12)}${fitCell("Valor", 16)}`,
       "-".repeat(92),
     ];
 

@@ -39,7 +39,7 @@ export function QuickActions() {
     {
       href: "/(tabs)/chat",
       title: "Conversar com IA",
-      description: "Tire duvidas sobre suas financas",
+      description: "Tire dúvidas sobre suas finanças",
       icon: (
         <View style={[styles.iconBadge, styles.iconInfo]}>
           <MessageCircle size={22} color="#ffffff" strokeWidth={2.2} />
@@ -48,8 +48,8 @@ export function QuickActions() {
     },
     {
       href: "/(tabs)/graphs",
-      title: "Graficos",
-      description: "Veja a evolucao de receitas, despesas, investimentos e saldo",
+      title: "Gráficos",
+      description: "Veja a evolução de receitas, despesas, investimentos e saldo",
       icon: (
         <View style={[styles.iconBadge, styles.iconInfo]}>
           <BarChart3 size={22} color="#ffffff" strokeWidth={2.2} />
@@ -61,7 +61,7 @@ export function QuickActions() {
   return (
     <Card style={styles.card}>
       <CardHeader>
-        <CardTitle style={styles.title}>Acoes Rapidas</CardTitle>
+        <CardTitle style={styles.title}>Ações Rápidas</CardTitle>
         <CardDescription style={styles.description}>
           Acesse rapidamente as funcionalidades principais
         </CardDescription>

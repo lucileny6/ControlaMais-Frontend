@@ -52,8 +52,8 @@ const buildInitialMessages = (name?: string): Message[] => [
 ];
 const getWelcomeMessage = (name?: string) =>
   name
-    ? `Ola, ${name}! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentacoes. O que deseja fazer?`
-    : "Ola! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentacoes. O que deseja fazer?";
+    ? `Olá, ${name}! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?`
+    : "Olá! Estou aqui para te ajudar. Posso consultar seu saldo, gastos e receitas ou registrar novas movimentações. O que deseja fazer?";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -301,7 +301,7 @@ export default function ChatPage() {
               <View style={styles.heroHeader}>
                 <Text style={styles.pageTitle}>Chat IA</Text>
                 <Text style={styles.pageSubtitle}>
-                  Converse com o assistente para registrar lancamentos e tirar duvidas financeiras.
+                  Converse com o assistente para registrar lançamentos e tirar dúvidas financeiras.
                 </Text>
               </View>
               <KeyboardAvoidingView
@@ -332,7 +332,7 @@ export default function ChatPage() {
                       </Text>
 
                       <Text style={styles.confirmHint}>
-                        Sua escolha sera enviada para o backend continuar o fluxo.
+                        Sua escolha será enviada para o backend continuar o fluxo.
                       </Text>
 
                       <View style={styles.confirmButtons}>
@@ -341,7 +341,7 @@ export default function ChatPage() {
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.cancelBtn} onPress={cancelar}>
-                          <Text style={styles.cancelBtnText}>Nao, cancelar</Text>
+                          <Text style={styles.cancelBtnText}>Não, cancelar</Text>
                         </TouchableOpacity>
                       </View>
                     </View>

@@ -71,16 +71,16 @@ export function exportFinancialPdf({
   if (typeof document === "undefined") {
     return {
       ok: false,
-      status: "No app mobile, a exportacao em PDF fica disponivel na versao web.",
-      alertMessage: "No app mobile, use a versao web para exportar PDF.",
+      status: "No app mobile, a exportação em PDF fica disponível na versão web.",
+      alertMessage: "No app mobile, use a versão web para exportar PDF.",
     };
   }
 
   if (transactions.length === 0) {
     return {
       ok: false,
-      status: "Nao ha dados no filtro selecionado para gerar o PDF.",
-      alertMessage: "Nao ha dados neste periodo para exportar.",
+      status: "Não há dados no filtro selecionado para gerar o PDF.",
+      alertMessage: "Não há dados neste período para exportar.",
     };
   }
 
@@ -107,8 +107,8 @@ export function exportFinancialPdf({
   ) {
     return {
       ok: false,
-      status: "A exportacao em PDF nao esta disponivel neste ambiente.",
-      alertMessage: "Exportacao PDF indisponivel neste ambiente.",
+      status: "A exportação em PDF não está disponível neste ambiente.",
+      alertMessage: "Exportação PDF indisponível neste ambiente.",
     };
   }
 
@@ -177,10 +177,10 @@ export function exportFinancialPdf({
     `${fitCell("TOTAL RECEITAS", 24)}${fitCell(`R$ ${compactCurrency(totalIncome)}`, 16)}    ${fitCell("TOTAL DESPESAS", 24)}${fitCell(`R$ ${compactCurrency(totalExpense)}`, 16)}`,
     " ",
     `TOTAL DE INVESTIMENTOS: R$ ${compactCurrency(totalInvestment)}`,
-    ...(investmentRows.length > 0 ? ["Investimentos no periodo:"] : []),
+    ...(investmentRows.length > 0 ? ["Investimentos no período:"] : []),
     ...investmentRows,
     `TOTAL RENDIMENTO INVEST.: R$ ${compactCurrency(totalInvestmentYield)}`,
-    ...(investmentYieldRows.length > 0 ? ["Rendimentos de investimento no periodo:"] : []),
+    ...(investmentYieldRows.length > 0 ? ["Rendimentos de investimento no período:"] : []),
     ...investmentYieldRows,
     " ",
     `SALDO FINAL: R$ ${compactCurrency(balance)}`,
@@ -240,6 +240,6 @@ export function exportFinancialPdf({
 
   return {
     ok: true,
-    status: "PDF gerado com sucesso. Se quiser, voce pode gerar novamente com outros filtros.",
+    status: "PDF gerado com sucesso. Se quiser, você pode gerar novamente com outros filtros.",
   };
 }

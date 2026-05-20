@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export interface Insight {
@@ -11,8 +11,8 @@ export interface Insight {
 
 const fallbackInsights: Insight[] = [
   {
-    title: 'Economia este mes',
-    description: 'Voce gastou menos que no mes passado. Continue assim.',
+    title: 'Economia este mês',
+    description: 'Você gastou menos que no mês passado. Continue assim.',
     type: 'positive',
   },
   {
@@ -55,7 +55,7 @@ export function FinancialInsights({ insights }: { insights?: Insight[] }) {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>Insights Financeiros</Text>
-        <Text style={styles.cardDescription}>Analises personalizadas das suas financas</Text>
+        <Text style={styles.cardDescription}>Análises personalizadas das suas finanças</Text>
       </View>
 
       <ScrollView style={styles.cardContent} showsVerticalScrollIndicator={false}>

@@ -44,7 +44,7 @@ function normalizeAIResponse(payload: JsonValue): AIResponse {
     pickString(record, ["mensagem"]) ??
     (tipo === "CONFIRMACAO"
       ? "Encontrei dados para confirmar. Deseja continuar?"
-      : "Recebi sua mensagem, mas o backend nao retornou um texto de resposta.");
+      : "Recebi sua mensagem, mas o backend não retornou um texto de resposta.");
 
   return dados || action
     ? {

@@ -74,8 +74,8 @@ export function DebtPredictor() {
       });
     } catch (error: any) {
       toast({
-        title: 'Erro ao calcular previsao',
-        description: error?.message ?? 'Nao foi possivel gerar o fluxo de caixa projetado.',
+        title: 'Erro ao calcular previsão',
+        description: error?.message ?? 'Não foi possível gerar o fluxo de caixa projetado.',
         variant: 'destructive',
       });
     } finally {
@@ -107,28 +107,28 @@ export function DebtPredictor() {
 
     if (projection.quantidadeRecorrentes === 0) {
       return [
-        'Marque receitas e despesas fixas como recorrentes para ativar a projecao futura.',
-        'Exemplos ideais: salario, aluguel, assinatura e contas mensais.',
+        'Marque receitas e despesas fixas como recorrentes para ativar a projeção futura.',
+        'Exemplos ideais: salário, aluguel, assinatura e contas mensais.',
       ];
     }
 
     if (riskLevel === 'high') {
       return [
-        'Suas despesas recorrentes estao pressionando o saldo futuro.',
+        'Suas despesas recorrentes estão pressionando o saldo futuro.',
         'Revise custos fixos e evite assumir novas parcelas antes de equilibrar o fluxo mensal.',
       ];
     }
 
     if (riskLevel === 'medium') {
       return [
-        'O fluxo mensal esta positivo, mas ainda merece acompanhamento.',
-        'Aumentar receitas recorrentes ou reduzir despesas fixas melhora a projecao rapidamente.',
+        'O fluxo mensal está positivo, mas ainda merece acompanhamento.',
+        'Aumentar receitas recorrentes ou reduzir despesas fixas melhora a projeção rapidamente.',
       ];
     }
 
     return [
-      'Seu fluxo recorrente esta saudavel no horizonte projetado.',
-      'Voce pode usar esse saldo previsto como base para metas e simulacoes de compra.',
+      'Seu fluxo recorrente está saudável no horizonte projetado.',
+      'Você pode usar esse saldo previsto como base para metas e simulações de compra.',
     ];
   }, [projection, riskLevel]);
 
@@ -176,15 +176,15 @@ export function DebtPredictor() {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Previsao de Endividamento</Text>
+        <Text style={styles.cardTitle}>Previsão de Endividamento</Text>
         <Text style={styles.cardDescription}>
-          Fluxo de caixa projetado com base nas transacoes recorrentes do sistema
+          Fluxo de caixa projetado com base nas transações recorrentes do sistema
         </Text>
       </View>
 
       <ScrollView style={styles.cardContent} showsVerticalScrollIndicator={false}>
         <View style={styles.riskContainer}>
-          <Text style={styles.riskLabel}>Nivel de risco</Text>
+          <Text style={styles.riskLabel}>Nível de risco</Text>
           <View style={[styles.riskBadge, getRiskColor(riskLevel)]}>
             <Text style={styles.riskBadgeText}>{getRiskLabel(riskLevel)}</Text>
           </View>
@@ -202,8 +202,8 @@ export function DebtPredictor() {
         {projection?.quantidadeRecorrentes === 0 && !isLoading && !isDashboardLoading && (
           <View style={styles.infoAlert}>
             <Text style={styles.infoAlertText}>
-              Nenhuma transacao recorrente foi encontrada. Os lancamentos atuais continuam no historico,
-              mas so entram na projecao futura quando estiverem marcados como recorrentes.
+              Nenhuma transação recorrente foi encontrada. Os lançamentos atuais continuam no histórico,
+              mas só entram na projeção futura quando estiverem marcados como recorrentes.
             </Text>
           </View>
         )}
@@ -272,7 +272,7 @@ export function DebtPredictor() {
             <View style={styles.timelineList}>
               {(projection?.projecaoMensal ?? []).slice(0, 6).map((item) => (
                 <View key={item.mes} style={styles.timelineRow}>
-                  <Text style={styles.timelineMonth}>Mes {item.mes}</Text>
+                  <Text style={styles.timelineMonth}>Mês {item.mes}</Text>
                   <Text style={[styles.timelineValue, getBalanceColor(item.saldo)]}>
                     R$ {formatCurrency(item.saldo)}
                   </Text>
@@ -286,7 +286,7 @@ export function DebtPredictor() {
           <Text style={styles.recommendationsTitle}>Resumo</Text>
           <View style={styles.recommendationsList}>
             {(isLoading || isDashboardLoading
-              ? ['Calculando previsao financeira...']
+              ? ['Calculando previsão financeira...']
               : recommendations
             ).map((rec, index) => (
               <View key={`${rec}-${index}`} style={styles.recommendationItem}>

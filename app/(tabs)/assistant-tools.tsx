@@ -83,7 +83,7 @@ export default function AssistantToolsPage() {
                 <View style={styles.header}>
                   <Text style={styles.title}>Assistente Financeiro</Text>
                   <Text style={styles.subtitle}>
-                    Simulacoes e previsao para apoiar suas decisoes financeiras
+                    Simulações e previsão para apoiar suas decisões financeiras
                   </Text>
                 </View>
 

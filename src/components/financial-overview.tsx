@@ -112,7 +112,7 @@ export function FinancialOverview({
               currency: "BRL",
             })}
           </Text>
-          <Text style={styles.subtitle}>Este mes</Text>
+          <Text style={styles.subtitle}>Este mês</Text>
         </CardContent>
       </Card>
 
@@ -142,7 +142,7 @@ export function FinancialOverview({
               currency: "BRL",
             })}
           </Text>
-          <Text style={styles.subtitle}>Aportes no mes</Text>
+          <Text style={styles.subtitle}>Aportes no mês</Text>
         </CardContent>
       </Card>
     </View>

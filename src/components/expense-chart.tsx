@@ -1,4 +1,4 @@
-﻿import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
@@ -39,8 +39,8 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
       maxWidth={isLargeScreen ? 600 : 0}
     >
       <CardHeader>
-        <CardTitle>Despesas e Orcamento por Categoria</CardTitle>
-        <CardDescription>Comparativo entre planejamento e gastos do mes</CardDescription>
+        <CardTitle>Despesas e Orçamento por Categoria</CardTitle>
+        <CardDescription>Comparativo entre planejamento e gastos do mês</CardDescription>
       </CardHeader>
 
       <CardContent style={styles.cardContent}>
@@ -106,7 +106,7 @@ export function ExpenseChart({ data }: { data?: ExpenseData[] }) {
           </ScrollView>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Sem despesas no mes atual.</Text>
+            <Text style={styles.emptyStateText}>Sem despesas no mês atual.</Text>
           </View>
         )}
       </CardContent>
@@ -241,7 +241,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
 });
-
 
 
 

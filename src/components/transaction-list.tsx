@@ -1,4 +1,4 @@
-﻿import {
+import {
   calculateMonthlyFinancialTotals,
   isInvestmentCategory,
 } from "@/lib/investments";
@@ -701,9 +701,9 @@ export function TransactionList({
       <View style={[styles.ledgerContainer, !isWebLedgerLayout && styles.ledgerContainerCompact, isCompactScreen && styles.ledgerContainerPhone]}>
         <View style={[styles.ledgerHeader, !isWebLedgerLayout && styles.ledgerHeaderCompact]}>
           <View>
-            <Text style={styles.ledgerTitle}>Lancamentos do periodo</Text>
+            <Text style={styles.ledgerTitle}>Lançamentos do período</Text>
             <Text style={styles.ledgerSubtitle}>
-              Visualize receitas e despesas do mes em formato de extrato.
+              Visualize receitas e despesas do mês em formato de extrato.
             </Text>
           </View>
           <View style={styles.ledgerBadge}>
@@ -717,11 +717,11 @@ export function TransactionList({
           <View style={styles.reportHeaderRow}>
             <Text style={[styles.reportHeaderText, styles.dateColumn]}>Data</Text>
             <Text style={[styles.reportHeaderText, styles.descriptionColumn]}>
-              Descricao
+              Descrição
             </Text>
             <Text style={[styles.reportHeaderText, styles.typeColumn]}>Tipo</Text>
             <Text style={[styles.reportHeaderText, styles.statusColumn]}>
-              Situacao
+              Situação
             </Text>
             <Text
               style={[
@@ -810,10 +810,10 @@ export function TransactionList({
               <Text style={styles.emptyStateIconMark}>-</Text>
             </View>
             <Text style={styles.emptyStateText}>
-              Nenhuma transacao encontrada neste periodo.
+              Nenhuma transação encontrada neste período.
             </Text>
             <Text style={styles.emptyStateHint}>
-              Ajuste os filtros ou troque o periodo para visualizar lancamentos.
+              Ajuste os filtros ou troque o período para visualizar lançamentos.
             </Text>
           </View>
         }

@@ -67,9 +67,9 @@ export function SavingsSuggestions({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Sugestoes de Economia</Text>
+        <Text style={styles.cardTitle}>Sugestões de Economia</Text>
         <Text style={styles.cardDescription}>
-          Leitura do periodo de {monthLabel}. Faixa ideal de despesas: {formatCurrency(expenseLimit)}.
+          Leitura do período de {monthLabel}. Faixa ideal de despesas: {formatCurrency(expenseLimit)}.
         </Text>
       </View>
 
@@ -77,15 +77,15 @@ export function SavingsSuggestions({
         {loading ? (
           <View style={styles.loadingBanner}>
             <ActivityIndicator size="small" color="#10233f" />
-            <Text style={styles.loadingBannerText}>Atualizando analise do periodo...</Text>
+            <Text style={styles.loadingBannerText}>Atualizando análise do período...</Text>
           </View>
         ) : null}
 
         {suggestions.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>Nenhum corte prioritario agora.</Text>
+            <Text style={styles.emptyStateTitle}>Nenhum corte prioritário agora.</Text>
             <Text style={styles.emptyStateText}>
-              Suas despesas somaram {formatCurrency(totalExpenses)} e ficaram dentro da faixa planejada para o periodo.
+              Suas despesas somaram {formatCurrency(totalExpenses)} e ficaram dentro da faixa planejada para o período.
             </Text>
           </View>
         ) : (
@@ -124,7 +124,7 @@ export function SavingsSuggestions({
 
         <View style={styles.totalContainer}>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Despesas do periodo</Text>
+            <Text style={styles.totalLabel}>Despesas do período</Text>
             <Text style={styles.totalAmount}>{formatCurrency(totalExpenses)}</Text>
           </View>
           <View style={styles.totalRow}>

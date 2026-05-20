@@ -105,7 +105,7 @@ const resolveLoginErrorMessage = (message: string) => {
     return "Usuário não aprovado ou credenciais inválidas";
   }
 
-  return message || "Nao foi possivel realizar login.";
+  return message || "Não foi possível realizar login.";
 };
 
 const PENDING_REGISTRATION_EMAIL_KEY = "pendingRegistrationEmail";
@@ -188,7 +188,7 @@ export default function Login() {
       const responseUser = getLoginUser(response);
 
       if (!token) {
-        throw new Error("Token de autenticacao nao retornado pelo backend");
+        throw new Error("Token de autenticação não retornado pelo backend");
       }
 
       const resolvedName = resolveDisplayNameFromLogin(responseUser, email);

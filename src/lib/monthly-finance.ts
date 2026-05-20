@@ -28,6 +28,7 @@ export type CurrentMonthFinanceIntent =
 
 export const parseTransactionDate = (value: unknown): Date | null => {
   const raw = String(value ?? "").trim();
+
   if (!raw) return null;
 
   const isoPattern = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/;
@@ -37,26 +38,70 @@ export const parseTransactionDate = (value: unknown): Date | null => {
   const isoMonthPattern = /^(\d{4})-(\d{2})$/;
 
   let parsed: Date;
+
   if (isoPattern.test(raw)) {
     const [, year, month, day] = raw.match(isoPattern)!;
-    parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+    parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
   } else if (brSlashPattern.test(raw)) {
     const [, day, month, year] = raw.match(brSlashPattern)!;
-    parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+    parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
   } else if (brDashPattern.test(raw)) {
     const [, day, month, year] = raw.match(brDashPattern)!;
-    parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+    parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
   } else if (monthYearPattern.test(raw)) {
     const [, month, year] = raw.match(monthYearPattern)!;
-    parsed = new Date(Number(year), Number(month) - 1, 1);
+
+    parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      1
+    );
   } else if (isoMonthPattern.test(raw)) {
     const [, year, month] = raw.match(isoMonthPattern)!;
-    parsed = new Date(Number(year), Number(month) - 1, 1);
+
+    parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      1
+    );
   } else {
-    parsed = new Date(raw);
+    // IMPORTANTE:
+    // removido o new Date(raw)
+    // porque ele interpretava datas brasileiras errado
+    return null;
   }
 
-  if (Number.isNaN(parsed.getTime())) return null;
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const parseTransactionCreatedAt = (value: unknown): Date | null => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return parseTransactionDate(raw);
+  }
+
   return parsed;
 };
 
@@ -106,6 +151,13 @@ export const normalizeDashboardTransaction = (transaction: any, index: number): 
       transaction?.classificacao ??
       (isInvestmentYieldCategory(rawType) ? "Rendimento de Investimento" : "Sem categoria"),
   );
+  const createdAt = String(
+    transaction?.createdAt ??
+      transaction?.created_at ??
+      transaction?.criadoEm ??
+      transaction?.dataCriacao ??
+      "",
+  );
 
   return {
     id: `${normalizedType}-${baseId}-${index}`,
@@ -122,15 +174,15 @@ export const normalizeDashboardTransaction = (transaction: any, index: number): 
     type: normalizedType,
     amount,
     date: String(
-      transaction?.date ??
-        transaction?.data ??
-        transaction?.dataTransacao ??
-        transaction?.dataLancamento ??
-        transaction?.dataDespesa ??
-        transaction?.dataReceita ??
-        transaction?.createdAt ??
-        "",
-    ),
+  transaction?.data ??
+    transaction?.date ??
+    transaction?.dataTransacao ??
+    transaction?.dataLancamento ??
+    transaction?.dataDespesa ??
+    transaction?.dataReceita ??
+    "",
+),
+    createdAt,
   };
 };
 
@@ -202,10 +254,10 @@ export const buildMonthlyFinanceSnapshot = (
   const topExpenseCategory = [...expenseTotalsByCategory.entries()]
     .sort((a, b) => b[1] - a[1])[0];
 
-  const recentTransactions = [...monthTransactions]
+  const recentTransactions = [...transactions]
     .sort((a, b) => {
-      const aTime = parseTransactionDate(a.date)?.getTime() ?? 0;
-      const bTime = parseTransactionDate(b.date)?.getTime() ?? 0;
+      const aTime = (parseTransactionCreatedAt(a.createdAt) ?? parseTransactionDate(a.date))?.getTime() ?? 0;
+      const bTime = (parseTransactionCreatedAt(b.createdAt) ?? parseTransactionDate(b.date))?.getTime() ?? 0;
       return bTime - aTime;
     })
     .slice(0, 10);

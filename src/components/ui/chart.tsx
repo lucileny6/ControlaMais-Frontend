@@ -12,7 +12,7 @@ export type ChartConfig = {
   [k in string]: {
     label?: string;
     color?: (opacity?: number) => string;
-    strokeWidth?: number;
+    strokeWidthá: number;
   }
 };
 

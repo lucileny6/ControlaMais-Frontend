@@ -68,13 +68,13 @@ expenseCategories.splice(
   expenseCategories.length,
   "Investimento",
   "Moradia",
-  "Alimentacao",
+  "Alimentação",
   "Restaurante",
   "Transporte",
-  "Saude",
+  "Saúde",
   "Lazer",
   "Compras",
-  "Educacao",
+  "Educação",
   "Pets",
   "Assinaturas",
   "Tecnologia",
@@ -88,11 +88,11 @@ const normalizeIncomeCategoryLabel = (value: string) => {
     .toLowerCase();
 
   if (normalized.includes("sal")) {
-    return "Sal\u00e1rio";
+    return "Salário";
   }
 
   if (normalized.includes("comiss") || normalized.includes("comi")) {
-    return "Comiss\u00e3o";
+    return "Comissão";
   }
 
   return value;
@@ -197,7 +197,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const recurrenceMonths = Math.floor(Number(formData.recurrenceMonths));
     if (formData.recorrente && (!Number.isFinite(recurrenceMonths) || recurrenceMonths < 1)) {
-      Alert.alert("Erro", "Informe uma quantidade de meses maior que zero para a recorrencia.");
+      Alert.alert("Erro", "Informe uma quantidade de meses maior que zero para a recorrência.");
       return;
     }
 
@@ -287,7 +287,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Recorrencia</Text>
+          <Text style={styles.label}>Recorrência</Text>
           <TouchableOpacity
             style={[
               styles.recurringToggle,
@@ -310,9 +310,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ]}
             />
             <View style={styles.recurringTextBlock}>
-              <Text style={styles.recurringTitle}>Transacao recorrente</Text>
+              <Text style={styles.recurringTitle}>Transação recorrente</Text>
               <Text style={styles.recurringDescription}>
-                Marque se essa receita ou despesa acontece todo mes.
+                Marque se essa receita ou despesa acontece todo mês.
               </Text>
             </View>
           </TouchableOpacity>
@@ -334,7 +334,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               }
             />
             <Text style={styles.fieldHint}>
-              Inclui o mes informado na data. Ex.: 3 cria este mes e mais 2 proximos.
+              Inclui o mês informado na data. Ex.: 3 cria este mês e mais 2 próximos.
             </Text>
           </View>
         )}

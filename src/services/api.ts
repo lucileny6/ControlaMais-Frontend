@@ -211,14 +211,14 @@ export class ApiService {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...requestOptions,
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json; charset=utf-8",
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           ...(requestOptions.headers || {}),
         },
       });
     } catch (error: any) {
       console.log(`[API] ${method} ${endpoint} network error:`, error);
-      throw new Error(`Falha de conexao em ${method} ${endpoint}`);
+      throw new Error(`Falha de conexão em ${method} ${endpoint}`);
     }
 
     console.log(`[API] ${method} ${endpoint} status:`, response.status);
@@ -239,7 +239,7 @@ export class ApiService {
           webEnv.location.assign?.("/login");
         }
 
-        throw new Error(error?.message || "Sessao expirada ou sem permissao. Faca login novamente.");
+        throw new Error(error?.message || "Sessão expirada ou sem permissão. Faça login novamente.");
       }
       /*
         if (false && skipAuth && endpoint === "/users/login") {
@@ -251,7 +251,7 @@ export class ApiService {
           webEnv.location.assign?.("/login");
         }
 
-        throw new Error(error?.message || "Sessao expirada ou sem permissao. Faça login novamente.");
+        throw new Error(error?.message || "Sessão expirada ou sem permissão. Faça login novamente.");
       
       */
       throw new Error(error?.message || `Erro ${response.status} em ${method} ${endpoint}`);
@@ -375,7 +375,7 @@ export class ApiService {
       }
     }
 
-    throw lastError ?? new Error("Nao foi possivel atualizar a transacao");
+    throw lastError ?? new Error("Não foi possível atualizar a transação");
   }
 
   async deleteTransaction(id: string, transactionType?: "income" | "expense" | "ia") {
@@ -397,7 +397,7 @@ export class ApiService {
       }
     }
 
-    throw lastError ?? new Error("Nao foi possivel excluir a transacao");
+    throw lastError ?? new Error("Não foi possível excluir a transação");
   }
 
   
@@ -599,6 +599,15 @@ export class ApiService {
           item?.data ??
           item?.date ??
           item?.createdAt,
+        createdAt:
+          source?.createdAt ??
+          source?.created_at ??
+          source?.criadoEm ??
+          source?.dataCriacao ??
+          item?.createdAt ??
+          item?.created_at ??
+          item?.criadoEm ??
+          item?.dataCriacao,
         observacao:
           source?.observacao ??
           source?.notes ??
@@ -655,30 +664,33 @@ export class ApiService {
     };
 
     const getFinancialActions = async () => {
-      const endpoints: string[] = [];
-      const extractedGroups: any[][] = [];
+  try {
+    const response = await this.request<any>("/transacoes", {
+      preserveSessionOnAuthError:
+        options.preserveSessionOnAuthError,
+    });
 
-      for (const endpoint of endpoints) {
-        try {
-          const response = await this.request<any>(endpoint, {
-            preserveSessionOnAuthError: options.preserveSessionOnAuthError,
-          });
-          const extracted = extractList(response).map(normalizeFinancialAction);
-          if (extracted.length > 0) {
-            extractedGroups.push(extracted);
-          }
-          console.log(`[API] GET ${endpoint} extracted:`, extracted);
-        } catch (error) {
-          const message = String((error as any)?.message ?? "");
-          if (message.includes("403") || message.includes("401") || message.toLowerCase().includes("sessao")) {
-            throw error;
-          }
-          console.log(`[API] GET ${endpoint} unavailable:`, error);
-        }
-      }
+    const extracted = extractList(response).map(
+      normalizeFinancialAction
+    );
 
-      return mergeTransactions(...extractedGroups);
-    };
+    console.log(
+      "[API] GET /acoes-financeiras extracted:",
+      extracted
+    );
+
+    return extracted;
+  } catch (error) {
+    console.log(
+      "[API] GET /acoes-financeiras error:",
+      error
+    );
+
+    return [];
+  }
+  
+};
+
 
     try {
       const response = await this.request<any>("/transacoes", {
@@ -874,7 +886,7 @@ export class ApiService {
       }
     }
 
-    throw lastError ?? new Error("Nao foi possivel consultar o endpoint do chat no backend.");
+    throw lastError ?? new Error("Não foi possível consultar o endpoint do chat no backend.");
   }
 }
 
@@ -929,12 +941,12 @@ function resolveApiBaseUrl() {
     process.env.EXPO_PUBLIC_BACKEND_URL;
 
   if (!configuredBaseUrl) {
-    return "http://localhost:8080/api";
+    return "https://controlamais.onrender.com/api";
   }
 
   const normalizedBaseUrl = configuredBaseUrl.trim().replace(/\/+$/, "");
   if (!normalizedBaseUrl) {
-    return "http://localhost:8080/api";
+    return "https://controlamais.onrender.com/api";
   }
 
   return /\/api$/i.test(normalizedBaseUrl)

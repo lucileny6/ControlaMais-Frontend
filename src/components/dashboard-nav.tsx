@@ -14,12 +14,12 @@ export function DashboardNav() {
       icon: LayoutDashboard,
     },
     {
-      title: "Transa\u00e7\u00f5es",
+      title: "Transações",
       href: "/(tabs)/transactions",
       icon: Wallet,
     },
     {
-      title: "Gr\u00e1ficos",
+      title: "Gráficos",
       href: "/(tabs)/graphs",
       icon: BarChart3,
     },

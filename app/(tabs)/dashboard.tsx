@@ -166,7 +166,7 @@ export default function PageDashboard() {
     const resolved = resolveUserName(currentUser);
     if (resolved) return resolved;
     if (currentUser?.email?.includes("@")) return currentUser.email.split("@")[0];
-    return "Usuario";
+    return "Usuário";
   };
 
   const displayName = getDisplayName(user);

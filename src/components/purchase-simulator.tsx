@@ -114,7 +114,7 @@ export function PurchaseSimulator() {
   const simulatePurchase = async () => {
     if (parsedPurchaseAmount <= 0) {
       toast({
-        title: 'Valor invalido',
+        title: 'Valor inválido',
         description: 'Informe um valor de compra maior que zero.',
         variant: 'destructive',
       });
@@ -123,7 +123,7 @@ export function PurchaseSimulator() {
 
     if (parsedInstallments <= 0) {
       toast({
-        title: 'Parcelas invalidas',
+        title: 'Parcelas inválidas',
         description: 'Informe uma quantidade de parcelas maior que zero.',
         variant: 'destructive',
       });
@@ -136,7 +136,7 @@ export function PurchaseSimulator() {
       setShowResultDetails(false);
       const webhookUrl = getPurchaseSimulatorWebhookUrl();
       if (!webhookUrl) {
-        throw new Error('Configure EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL com a URL do n8n acessivel pelo celular.');
+        throw new Error('Configure EXPO_PUBLIC_PURCHASE_SIMULATOR_WEBHOOK_URL com a URL do n8n acessível pelo celular.');
       }
 
       const projecaoMensal = await buildProjectedCashFlowPayload(parsedInstallments, saldo);
@@ -158,7 +158,7 @@ export function PurchaseSimulator() {
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(payload),
       });
@@ -179,7 +179,7 @@ export function PurchaseSimulator() {
     } catch (error: any) {
       toast({
         title: 'Erro ao simular compra',
-        description: error?.message ?? 'Nao foi possivel consultar o workflow do n8n.',
+        description: error?.message ?? 'Não foi possível consultar o workflow do n8n.',
         variant: 'destructive',
       });
     } finally {
@@ -200,14 +200,14 @@ export function PurchaseSimulator() {
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>Simulador de Compras</Text>
         <Text style={styles.cardDescription}>
-          Envie os dados da compra para o workflow do n8n e veja a simulacao retornada
+          Envie os dados da compra para o workflow do n8n e veja a simulação retornada
         </Text>
       </View>
 
       <ScrollView style={styles.cardContent} showsVerticalScrollIndicator={false}>
         <View style={styles.formContainer}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Descricao da compra</Text>
+            <Text style={styles.label}>Descrição da compra</Text>
             <TextInput
               style={styles.input}
               placeholder="Ex: Notebook, Geladeira, Viagem..."
@@ -262,7 +262,7 @@ export function PurchaseSimulator() {
 
           {result && (
             <TouchableOpacity style={styles.resetButton} onPress={resetSimulation}>
-              <Text style={styles.resetButtonText}>Nova Simulacao</Text>
+              <Text style={styles.resetButtonText}>Nova Simulação</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -305,7 +305,7 @@ export function PurchaseSimulator() {
                   onPress={() => setShowResultDetails((current) => !current)}
                 >
                   <Text style={styles.detailsButtonText}>
-                    {showResultDetails ? 'Ocultar detalhes do calculo' : 'Ver detalhes do calculo'}
+                    {showResultDetails ? 'Ocultar detalhes do cálculo' : 'Ver detalhes do cálculo'}
                   </Text>
                 </TouchableOpacity>
 
@@ -377,7 +377,7 @@ transactions.forEach(t => {
   //  MONTA A PROJEÇÃO (repete o mês atual para os próximos)
   return Array.from({ length: months }, (_, index) => ({
     mes: index + 1,
-    referencia: `Mes ${index + 1}`,
+    referencia: `Mês ${index + 1}`,
     receitas: roundCurrency(receitasMes),
     despesas: roundCurrency(despesasMes),
     saldo_base: roundCurrency(receitasMes - despesasMes),
@@ -485,7 +485,7 @@ async function buildProjectionPayloadCurrentMonth(months: number) {
 
   return Array.from({ length: months }, (_, index) => ({
     mes: index + 1,
-    referencia: `Mes ${index + 1}`,
+    referencia: `Mês ${index + 1}`,
     receitas: roundCurrency(receitasMes),
     despesas: roundCurrency(despesasMes),
     saldo_base: roundCurrency(receitasMes - despesasMes),
@@ -669,7 +669,7 @@ function detectViablePurchase(value: JsonValue | null) {
     return false;
   }
 
-  if (content.includes('nao e viavel') || content.includes('nao viavel') || content.includes('inviavel')) {
+  if (content.includes('não ? viável') || content.includes('não viável') || content.includes('inviavel')) {
     return false;
   }
 
@@ -711,7 +711,7 @@ function renderWorkflowSimulationDetails(value: JsonValue, chartWidth: number): 
 
   return (
     <View style={styles.detailsContainer}>
-      <Text style={styles.detailsTitle}>Detalhes do calculo</Text>
+      <Text style={styles.detailsTitle}>Detalhes do cálculo</Text>
       {series.length > 1 ? <SimulationLineChart data={series} width={chartWidth} /> : null}
       {simulation.map((item, index) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -732,7 +732,7 @@ function renderWorkflowSimulationDetails(value: JsonValue, chartWidth: number): 
 
         return (
           <View key={`simulation-${index}`} style={styles.detailCard}>
-            <Text style={styles.detailCardTitle}>Mes {index + 1}</Text>
+            <Text style={styles.detailCardTitle}>Mês {index + 1}</Text>
             {fields.map(([entryKey, entryValue]) => (
               <View key={entryKey} style={styles.detailRow}>
                 <Text style={styles.detailLabel}>{formatJsonKey(entryKey)}</Text>
@@ -874,7 +874,7 @@ function SimulationLineChart({ data, width }: { data: SimulationPoint[]; width: 
 
   return (
     <View style={styles.chartCard}>
-      <Text style={styles.chartTitle}>Evolucao da simulacao</Text>
+      <Text style={styles.chartTitle}>Evolução da simulação</Text>
       <Text style={styles.chartSubtitle}>Comparativo mensal entre saldo base, parcela e saldo final.</Text>
 
       <Svg width={width} height={chartHeight}>

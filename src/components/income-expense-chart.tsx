@@ -371,7 +371,7 @@ export function CumulativeFinanceLineChart({
       </View>
 
       <Text style={styles.lineChartHint}>
-        Passe o mouse na linha no web ou toque no grafico no mobile para ver os valores do dia.
+        Passe o mouse na linha no web ou toque no gráfico no mobile para ver os valores do dia.
       </Text>
     </View>
   );
@@ -600,7 +600,7 @@ export function IncomeExpenseChart({
       maxWidth={isLargeScreen ? 820 : 0}
     >
       <CardHeader>
-        <CardTitle>Evolucao financeira acumulada</CardTitle>
+        <CardTitle>Evolução financeira acumulada</CardTitle>
         <CardDescription>
           {description || "Receita, despesa, investimento e saldo acumulados por dia."}
         </CardDescription>
@@ -609,7 +609,7 @@ export function IncomeExpenseChart({
       <CardContent style={styles.cardContent}>
         {chartData.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Sem movimentacoes no periodo selecionado.</Text>
+            <Text style={styles.emptyStateText}>Sem movimentações no período selecionado.</Text>
           </View>
         ) : (
           <>

@@ -169,10 +169,10 @@ export function DashboardHeader() {
 
   const displayName = useMemo(() => {
     const rawName = resolveUserName(user);
-    return rawName || "Usuario";
+    return rawName || "Usuário";
   }, [user]);
 
-  const displayEmail = user?.email?.trim() ? user.email.trim() : "Email nao informado";
+  const displayEmail = user?.email?.trim() ? user.email.trim() : "Email não informado";
   const avatarInitial = resolveAvatarInitial(displayName);
 
   const handleAvatarPress = (event: any) => {
@@ -182,7 +182,7 @@ export function DashboardHeader() {
   };
 
   const menuItems = [
-    { label: "Configuracoes", onPress: () => router.push("/settings") },
+    { label: "Configurações", onPress: () => router.push("/settings") },
     { label: "Ajuda", onPress: () => router.push("/help") },
     {
       label: "Sair",
